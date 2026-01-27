@@ -2,7 +2,7 @@
   <nav class="navbar">
     <div class="navbar-container">
       <div class="navbar-brand">
-        <h1>AI 助手</h1>
+        <h1>MagiMimi</h1>
       </div>
 
       <!-- 移动端菜单按钮 -->

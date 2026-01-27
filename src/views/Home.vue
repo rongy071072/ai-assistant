@@ -5,13 +5,13 @@
       <div class="logo-section">
         <div class="logo-placeholder">
           <!-- Logo图片将在这里显示 -->
-          <span class="logo-text">AI助手</span>
+          <span class="logo-text">MagiMimi</span>
         </div>
       </div>
 
       <!-- 标题和描述 -->
       <div class="title-section">
-        <h1 class="main-title">欢迎使用AI助手</h1>
+        <h1 class="main-title">欢迎使用 MagiMimi</h1>
         <p class="subtitle">智能对话，随时为您服务</p>
       </div>
 

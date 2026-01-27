@@ -36,7 +36,7 @@
         <button class="menu-btn" @click="toggleSidebar">
           <span>☰</span>
         </button>
-        <h2 class="chat-title">AI助手对话</h2>
+        <h2 class="chat-title">MagiMimi</h2>
         <div class="header-actions">
           <button class="back-btn" @click="goBack">
             <span>←</span> 返回
@@ -811,7 +811,7 @@ const handleVoiceConfirm = (text) => {
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  background-image: url('/猫咪探头2-dark.svg');
+  background-image: url('/cat-dark.svg');
   transition: background-image 0.3s ease;
 }
 
@@ -1009,6 +1009,7 @@ const handleVoiceConfirm = (text) => {
   gap: 0.75rem;
   align-items: flex-end;
   max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -1039,6 +1040,8 @@ const handleVoiceConfirm = (text) => {
 
 .message-input {
   flex: 1;
+  width: 0; /* 强制 flex item 收缩 */
+  min-width: 0; /* 防止在 flex 容器中溢出 */
   padding: 0.75rem 1rem;
   border: 2px solid var(--border-color);
   border-radius: 24px;
@@ -1067,6 +1070,7 @@ const handleVoiceConfirm = (text) => {
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -1191,7 +1195,7 @@ const handleVoiceConfirm = (text) => {
 <style>
 /* 全局样式适配暗黑模式 */
 [data-theme="dark"] .cat-avatar {
-  background-image: url('/猫咪探头2-light.svg') !important;
+  background-image: url('/cat-light.svg') !important;
 }
 </style>
 

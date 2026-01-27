@@ -68,19 +68,22 @@ onMounted(() => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
   border-radius: 20px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
 }
 
 .user-profile:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
+  transform: translateY(-1px);
 }
 
 .not-logged-in {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .logged-in {
@@ -89,17 +92,17 @@ onMounted(() => {
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   margin-right: 8px;
   object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--border-color);
 }
 
 .username {
   font-size: 14px;
-  color: white;
+  color: var(--text-primary);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;

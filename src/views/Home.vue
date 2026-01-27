@@ -112,6 +112,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: var(--bg-primary);
 }
 
 .background-image {
@@ -120,9 +121,9 @@ onMounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%);
   z-index: 0;
-  opacity: 0.3;
+  opacity: 1;
   /* 背景图片将在这里显示 */
 }
 
@@ -131,7 +132,7 @@ onMounted(() => {
   z-index: 1;
   text-align: center;
   padding: 2rem;
-  max-width: 600px;
+  max-width: 800px;
 }
 
 .logo-section {
@@ -142,18 +143,21 @@ onMounted(() => {
   width: 120px;
   height: 120px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--card-bg);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
 }
 
 .logo-text {
   font-size: 1.5rem;
-  font-weight: bold;
-  color: #667eea;
+  font-weight: 800;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .title-section {
@@ -161,16 +165,22 @@ onMounted(() => {
 }
 
 .main-title {
-  font-size: 3rem;
-  font-weight: bold;
-  color: #fff;
-  margin-bottom: 1rem;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  text-shadow: none;
 }
 
 .subtitle {
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  margin-bottom: 3rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .action-buttons {
@@ -181,40 +191,42 @@ onMounted(() => {
 }
 
 .btn {
-  padding: 1rem 2rem;
+  padding: 0.875rem 2rem;
   font-size: 1rem;
   border: none;
-  border-radius: 50px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  font-weight: 600;
+  box-shadow: none;
 }
 
 .btn-primary {
-  background: #fff;
-  color: #667eea;
-  font-weight: 600;
+  background: var(--brand-color);
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2), 0 2px 4px -1px rgba(79, 70, 229, 0.1);
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  background: var(--brand-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
+  background: var(--border-color);
+  transform: translateY(-1px);
 }
+
 
 .btn-icon {
   font-size: 1.2rem;
@@ -259,14 +271,14 @@ onMounted(() => {
 }
 
 .icp-link {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-tertiary);
   text-decoration: none;
-  font-size: 0.9rem;
-  transition: color 0.3s ease;
+  font-size: 0.875rem;
+  transition: color 0.2s ease;
 }
 
 .icp-link:hover {
-  color: rgba(255, 255, 255, 1);
+  color: var(--text-secondary);
   text-decoration: underline;
 }
 </style>

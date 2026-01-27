@@ -20,7 +20,7 @@
             <div class="history-time">{{ formatHistoryTime(session.timestamp) }}</div>
           </div>
         </div>
-        <button class="new-session-btn" @click="createNewSession">
+        <button class="new-session-btn" @click="startNewChat">
           <span>+</span> 新建对话
         </button>
       </div>
@@ -316,29 +316,6 @@ const sendMessage = async () => {
   }
 }
 
-// 创建新对话
-// const createNewChat = async () => {
-//   try {
-//     // 生成新的SessionID（年月日时分秒格式）
-//     const newSessionId = chatStore.generateNewSessionId()
-    
-//     // 先设置SessionID，这样请求会使用新的SessionID
-//     chatStore.currentSessionId = newSessionId
-    
-//     const response = await chatApi.createChat()
-//     const newChatId = response.id || response.chatId || Date.now().toString()
-//     chatId.value = newChatId
-    
-//     // 将SessionID与会话关联
-//     chatStore.setSessionIdForChat(newChatId, newSessionId)
-//     chatStore.setCurrentChatId(newChatId)
-    
-//     // 更新路由但不刷新页面
-//     router.replace(`/chat/${newChatId}`)
-//   } catch (error) {
-//     console.error('创建对话失败:', error)
-//   }
-// }
 
 // 加载对话历史
 const loadChatHistory = async (id) => {
@@ -473,8 +450,11 @@ const loadChatHistoryList = () => {
 const startNewChat = async () => {
   // 清空当前消息
   messages.value = []
-  // 创建新会话
-  await createNewChat()
+  // 创建新sessionId
+  const newSessionId = chatStore.generateNewSessionId()
+  sessionStorage.setItem('sessionId', newSessionId)
+  currentSessionId.value = newSessionId
+  chatStore.setCurrentSessionId(newSessionId)
 }
 
 // 处理语音识别确认
@@ -494,7 +474,7 @@ const handleVoiceConfirm = (text) => {
 .chat-container {
   display: flex;
   height: 100%;
-  background: #f5f5f5;
+  background: var(--bg-primary);
   position: relative;
 }
 
@@ -505,11 +485,13 @@ const handleVoiceConfirm = (text) => {
   top: 0;
   height: 100%;
   width: 300px;
-  background: #fff;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  background: var(--bg-secondary);
+  box-shadow: var(--sidebar-shadow);
   transform: translateX(-100%);
   transition: transform 0.3s ease;
   z-index: 1000;
+  border-right: 1px solid var(--border-color);
+  backdrop-filter: blur(20px);
 }
 
 .sidebar-drawer.open {
@@ -518,7 +500,7 @@ const handleVoiceConfirm = (text) => {
 
 .sidebar-header {
   padding: 1rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -528,6 +510,7 @@ const handleVoiceConfirm = (text) => {
   margin: 0;
   font-size: 1.2rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .close-btn {
@@ -537,11 +520,11 @@ const handleVoiceConfirm = (text) => {
   cursor: pointer;
   padding: 0.25rem;
   border-radius: 4px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .close-btn:hover {
-  background: #f0f0f0;
+  background: var(--bg-tertiary);
 }
 
 .sidebar-content {
@@ -563,15 +546,16 @@ const handleVoiceConfirm = (text) => {
   cursor: pointer;
   transition: background-color 0.2s;
   border: 1px solid transparent;
+  color: var(--text-primary);
 }
 
 .history-item:hover {
-  background: #f8f9fa;
-  border-color: #e0e0e0;
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
 }
 
 .history-item.active {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.1);
   border-color: #2196f3;
 }
 
@@ -581,11 +565,12 @@ const handleVoiceConfirm = (text) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-primary);
 }
 
 .history-time {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-tertiary);
 }
 
 .new-session-btn {
@@ -679,13 +664,15 @@ const handleVoiceConfirm = (text) => {
 }
 
 .chat-header {
-  background: #fff;
+  background: var(--bg-secondary);
   padding: 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 0 var(--border-color);
   z-index: 10;
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(20px);
 }
 
 .menu-btn {
@@ -695,11 +682,11 @@ const handleVoiceConfirm = (text) => {
   cursor: pointer;
   padding: 0.5rem;
   border-radius: 4px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .menu-btn:hover {
-  background: #f0f0f0;
+  background: var(--bg-tertiary);
 }
 
 .back-btn {
@@ -728,7 +715,7 @@ const handleVoiceConfirm = (text) => {
 
 /* 新会话按钮 - 主要操作按钮，使用醒目样式 */
 .new-chat-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: var(--primary-gradient);
   border: none;
   padding: 0.625rem 1.25rem;
   cursor: pointer;
@@ -755,12 +742,12 @@ const handleVoiceConfirm = (text) => {
 
 /* 查看记录按钮 - 次要操作按钮，使用简洁样式 */
 .history-btn {
-  background: #f7fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
   padding: 0.625rem 1.25rem;
   cursor: pointer;
   font-size: 0.95rem;
-  color: #4a5568;
+  color: var(--text-secondary);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -769,15 +756,14 @@ const handleVoiceConfirm = (text) => {
 }
 
 .history-btn:hover {
-  background: #edf2f7;
-  border-color: #cbd5e0;
-  color: #2d3748;
+  background: var(--border-color);
+  color: var(--text-primary);
 }
 
 .chat-title {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .messages-container {
@@ -829,10 +815,12 @@ const handleVoiceConfirm = (text) => {
 .message-text {
   padding: 0.75rem 1rem;
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--message-assistant-bg);
+  color: var(--message-assistant-text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   word-wrap: break-word;
   line-height: 1.5;
+  border: 1px solid var(--border-color);
 }
 
 /* Markdown 样式适配 */
@@ -849,7 +837,7 @@ const handleVoiceConfirm = (text) => {
 }
 
 .message-text :deep(pre) {
-  background: #f6f8fa;
+  background: var(--bg-tertiary);
   padding: 1rem;
   border-radius: 8px;
   overflow-x: auto;
@@ -859,9 +847,10 @@ const handleVoiceConfirm = (text) => {
 .message-text :deep(code) {
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 0.9em;
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(127, 127, 127, 0.1);
   padding: 0.2em 0.4em;
   border-radius: 3px;
+  color: var(--text-primary);
 }
 
 .message-text :deep(pre code) {
@@ -891,8 +880,8 @@ const handleVoiceConfirm = (text) => {
 .message-text :deep(blockquote) {
   margin: 0.5em 0;
   padding-left: 1em;
-  border-left: 4px solid #dfe2e5;
-  color: #6a737d;
+  border-left: 4px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
 .message-text :deep(h1), .message-text :deep(h2), .message-text :deep(h3), 
@@ -902,13 +891,14 @@ const handleVoiceConfirm = (text) => {
   line-height: 1.25;
 }
 
-.message-text :deep(h1) { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
-.message-text :deep(h2) { font-size: 1.3em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+.message-text :deep(h1) { font-size: 1.5em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
+.message-text :deep(h2) { font-size: 1.3em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
 .message-text :deep(h3) { font-size: 1.1em; }
 
 /* 用户消息中的 Markdown 样式适配 (深色背景) */
 .message-item.user .message-text :deep(code) {
   background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .message-item.user .message-text :deep(pre) {
@@ -931,13 +921,15 @@ const handleVoiceConfirm = (text) => {
 }
 
 .message-item.user .message-text {
-  background: #667eea;
-  color: #fff;
+  background: var(--message-user-bg);
+  color: var(--message-user-text);
+  border: none;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
 }
 
 .message-time {
   font-size: 0.75rem;
-  color: #999;
+  color: var(--text-tertiary);
   padding: 0 0.5rem;
 }
 
@@ -945,7 +937,7 @@ const handleVoiceConfirm = (text) => {
   display: flex;
   gap: 0.25rem;
   padding: 0.75rem 1rem;
-  background: #fff;
+  background: var(--message-assistant-bg);
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -987,9 +979,11 @@ const handleVoiceConfirm = (text) => {
 }
 
 .input-container {
-  background: #fff;
+  background: var(--bg-secondary);
   padding: 1rem;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -1px 0 var(--border-color);
+  border-top: 1px solid var(--border-color);
+  backdrop-filter: blur(20px);
 }
 
 .input-wrapper {
@@ -1001,8 +995,8 @@ const handleVoiceConfirm = (text) => {
 }
 
 .voice-btn {
-  background: #f7fafc;
-  border: 2px solid #e2e8f0;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
   border-radius: 50%;
   width: 44px;
   height: 44px;
@@ -1016,8 +1010,8 @@ const handleVoiceConfirm = (text) => {
 }
 
 .voice-btn:hover {
-  background: #edf2f7;
-  border-color: #cbd5e0;
+  background: var(--border-color);
+  border-color: var(--border-hover);
   transform: scale(1.05);
 }
 
@@ -1028,13 +1022,15 @@ const handleVoiceConfirm = (text) => {
 .message-input {
   flex: 1;
   padding: 0.75rem 1rem;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--border-color);
   border-radius: 24px;
   font-size: 1rem;
   font-family: inherit;
   resize: none;
   max-height: 120px;
   transition: border-color 0.2s;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 .message-input:focus {
@@ -1072,7 +1068,7 @@ const handleVoiceConfirm = (text) => {
   gap: 0.5rem;
   margin-top: 0.5rem;
   padding: 0.5rem;
-  background: #f7fafc;
+  background: var(--bg-tertiary);
   border-radius: 8px;
   font-size: 0.875rem;
   color: #667eea;
@@ -1081,7 +1077,7 @@ const handleVoiceConfirm = (text) => {
 .extracting-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--border-color);
   border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -1101,7 +1097,7 @@ const handleVoiceConfirm = (text) => {
   display: inline-block;
   margin: 0 0.25rem;
   padding: 0.25rem 0.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: var(--primary-gradient);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -1128,7 +1124,7 @@ const handleVoiceConfirm = (text) => {
   margin-top: 0.5rem;
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
-  color: #718096;
+  color: var(--text-tertiary);
   font-style: italic;
 }
 

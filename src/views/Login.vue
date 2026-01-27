@@ -152,11 +152,11 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: var(--primary-gradient);
 }
 
 .login-box {
-  background: white;
+  background: var(--card-bg);
   padding: 40px;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -165,7 +165,7 @@ onMounted(() => {
 
   h1 {
     text-align: center;
-    color: #333;
+    color: var(--text-primary);
     margin-bottom: 30px;
     font-size: 28px;
   }
@@ -210,16 +210,18 @@ onMounted(() => {
 
   label {
     font-weight: 600;
-    color: #555;
+    color: var(--text-secondary);
     font-size: 14px;
   }
 
   input {
     padding: 12px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     font-size: 14px;
     transition: border-color 0.3s;
+    background: var(--input-bg);
+    color: var(--text-primary);
 
     &:focus {
       outline: none;
@@ -228,14 +230,14 @@ onMounted(() => {
     }
 
     &::placeholder {
-      color: #999;
+      color: var(--text-tertiary);
     }
   }
 }
 
 .login-btn {
   padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  background: var(--primary-gradient);
   color: white;
   border: none;
   border-radius: 5px;
@@ -268,13 +270,13 @@ onMounted(() => {
     .captcha-image {
       width: 100px;
       height: 40px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--border-color);
       border-radius: 5px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f8f9fa;
+      background: var(--bg-tertiary);
       transition: border-color 0.3s;
 
       &:hover {
@@ -289,7 +291,7 @@ onMounted(() => {
       }
 
       .captcha-placeholder {
-        color: #999;
+        color: var(--text-tertiary);
         font-size: 12px;
         text-align: center;
       }

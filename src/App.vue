@@ -26,6 +26,25 @@ const authPages = ['Login', 'Register']
 const isAuthPage = computed(() => {
   return authPages.includes(route.name)
 })
+
+// 初始化主题
+const initTheme = () => {
+  const savedTheme = localStorage.getItem('theme')
+  const root = document.documentElement
+  if (savedTheme === 'dark') {
+    root.setAttribute('data-theme', 'dark')
+  } else if (savedTheme === 'light') {
+    root.setAttribute('data-theme', 'light')
+  } else {
+    // Check system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      root.setAttribute('data-theme', 'dark')
+      localStorage.setItem('theme', 'dark') // Optional: save system preference
+    }
+  }
+}
+
+initTheme()
 </script>
 
 <style scoped>

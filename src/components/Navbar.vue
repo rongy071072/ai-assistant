@@ -25,6 +25,7 @@
       </div>
 
       <div class="navbar-user">
+        <ThemeToggle />
         <UserProfile />
       </div>
     </div>
@@ -34,6 +35,7 @@
 <script setup>
 import { ref } from 'vue'
 import UserProfile from '@/components/UserProfile.vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const isMenuOpen = ref(false)
 
@@ -48,19 +50,22 @@ const closeMenu = () => {
 
 <style scoped>
 .navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background: var(--navbar-bg);
+  box-shadow: var(--shadow-sm);
+  border-bottom: var(--navbar-border);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .navbar-container {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 1.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -68,39 +73,48 @@ const closeMenu = () => {
 }
 
 .navbar-brand h1 {
-  color: white;
+  color: var(--navbar-text);
   margin: 0;
   font-size: 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .navbar-menu {
   display: flex;
   gap: 2rem;
+  margin-right: auto; /* Push user section to the right */
+  margin-left: 3rem;  /* Add space after brand */
 }
 
 .nav-link {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   text-decoration: none;
   font-weight: 500;
   padding: 0.5rem 1rem;
-  border-radius: 20px;
-  transition: all 0.3s ease;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
 }
 
 .nav-link:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--brand-color);
+  background: var(--bg-tertiary);
 }
 
 .nav-link.active {
-  color: white;
-  background: rgba(255, 255, 255, 0.2);
+  color: var(--brand-color);
+  background: var(--bg-tertiary);
+  font-weight: 600;
 }
 
 .navbar-user {
   display: flex;
   align-items: center;
+  gap: 1.5rem; /* Increased gap from 1rem */
 }
 
 /* 移动端菜单按钮默认隐藏 */
@@ -119,8 +133,8 @@ const closeMenu = () => {
 
 .mobile-menu-btn span {
   width: 100%;
-  height: 3px;
-  background-color: white;
+  height: 2px;
+  background-color: var(--text-primary);
   border-radius: 10px;
   transition: all 0.3s linear;
   position: relative;
@@ -159,15 +173,19 @@ const closeMenu = () => {
     top: 60px; /* Navbar height */
     left: 0;
     width: 100%;
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 50%, rgba(240, 147, 251, 0.95) 100%);
+    background: var(--navbar-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     flex-direction: column;
     align-items: center;
     padding: 2rem 0;
     gap: 1.5rem;
     transform: translateY(-150%);
     transition: transform 0.3s ease-in-out;
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-lg);
     z-index: 999;
+    border-bottom: var(--navbar-border);
+    margin: 0; /* Override desktop margin */
   }
 
   .navbar-menu.is-open {

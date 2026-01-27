@@ -58,10 +58,10 @@
         <div class="message-content">
           <div class="message-text" v-html="formatMessage(message.content)" @click="handlePreviewClick"></div>
 
-          <!-- 打字机输出中的提示 -->
-          <div v-if="message.typing" class="typing-indicator-small">
+          <!-- 打字机输出中的提示 - 已移除 -->
+          <!-- <div v-if="message.typing" class="typing-indicator-small">
             <span>正在生成方案...</span>
-          </div>
+          </div> -->
           <div class="message-time">{{ formatTime(message.timestamp) }}</div>
         </div>
       </div>
@@ -117,12 +117,33 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { chatApi } from '@/api/chat'
 import { useChatStore } from '@/stores/chat'
+import { authConfig } from '@/config'
 import VoiceInput from '@/components/VoiceInput.vue'
 import { extractMessageContent } from '@/api/chat'
+import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github.css' // 或者其他你喜欢的主题，如 atom-one-dark.css
+
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+  highlight: function (str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return '<pre class="hljs"><code>' +
+               hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+               '</code></pre>';
+      } catch (__) {}
+    }
+
+    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+  }
+})
 
 const router = useRouter()
 const route = useRoute()
@@ -134,9 +155,6 @@ const isLoading = ref(false)
 const messagesContainer = ref(null)
 const inputRef = ref(null)
 const showVoiceModal = ref(false)
-const typingMessageIndex = ref(-1) // 正在打字机输出的消息索引
-const typingTimer = ref(null) // 打字机定时器
-
 
 // 侧边栏相关状态
 const showSidebar = ref(false)
@@ -175,11 +193,12 @@ watch(
   }
 )
 
-// 监听消息内容变化，重新绑定按钮（用于打字机效果）
+// 监听消息内容变化，自动滚动（用于流式输出）
 watch(
-  () => messages.value.map(m => m.content).join(''),
+  () => messages.value.length > 0 ? messages.value[messages.value.length - 1].content : '',
   () => {
     nextTick(() => {
+      scrollToBottom()
     })
   }
 )
@@ -199,45 +218,95 @@ const sendMessage = async () => {
   inputText.value = ''
   isLoading.value = true
 
+  // 创建助手消息对象，使用 reactive 确保响应式更新
+  const assistantMessage = reactive({
+    role: 'assistant',
+    content: '',
+    timestamp: new Date()
+  })
+
   try {
-    const response = await chatApi.sendMessage( currentInput,currentSessionId.value,userId.value)
-    // 使用统一的消息提取函数处理响应
-    const content = extractMessageContent(response)
-    // 普通消息，直接显示
-    const assistantMessage = {
-      role: 'assistant',
-      content: content,
-      timestamp: new Date()
+    const token = authConfig.getAuthorization()
+    const response = await fetch('/api/common_server/agent/execute', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token || ''
+      },
+      body: JSON.stringify({
+        query: currentInput,
+        sessionId: currentSessionId.value,
+        userId: userId.value
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
     }
-    messages.value.push(assistantMessage)
     
+    // 收到响应，隐藏加载动画，显示消息气泡
+    isLoading.value = false
+    messages.value.push(assistantMessage)
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      
+      // 处理 SSE 数据块
+      const lines = buffer.split('\n')
+      // 保留最后一个可能不完整的行
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmedLine = line.trim()
+        if (!trimmedLine || !trimmedLine.startsWith('data:')) continue
+
+        const dataStr = trimmedLine.slice(5).trim()
+        if (dataStr === '[DONE]') continue
+
+        try {
+          const data = JSON.parse(dataStr)
+          // 提取内容，根据实际后端返回结构调整
+          const content = data.content || data.data || ''
+          
+          if (content) {
+            assistantMessage.content += content
+          }
+        } catch (e) {
+          console.warn('解析SSE数据失败:', e, dataStr)
+          if (dataStr && !dataStr.startsWith('{')) {
+             assistantMessage.content += dataStr
+          }
+        }
+      }
+    }
+
   } catch (error) {
     console.error('发送消息失败:', error)
     
-    // 根据错误类型提供不同的提示信息
-    let errorMessage = '抱歉，发送消息时出现错误，请稍后重试。'
+    // 发生错误时，如果消息还未加入列表（即请求阶段就失败了），则加入并显示错误
+    // 如果消息已加入列表（流传输中途中断），则追加错误信息
     
-    if (error.isTimeout || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      // 超时错误 - AI响应时间较长，提示用户稍等
-      errorMessage = 'AI正在思考中，响应时间较长，请稍后重试或检查网络连接。'
-    } else if (error.response) {
-      // 服务器返回错误
-      const status = error.response.status
-      if (status >= 500) {
-        errorMessage = '服务器暂时无法响应，请稍后重试。'
-      } else if (status === 401 || status === 403) {
-        errorMessage = '认证失败，请检查登录状态。'
-      }
-    } else if (error.request) {
-      // 网络错误
-      errorMessage = '网络连接异常，请检查网络后重试。'
+    const errorMessage = '抱歉，发送消息时出现错误，请稍后重试。'
+    const networkErrorMsg = '\n\n[网络连接异常或请求超时]'
+
+    // 检查消息是否已在列表中（通过引用比较可能不准确，因为 push 进去的是 Proxy）
+    // 这里简单判断 assistantMessage.content 是否为空来决定是否是初始请求失败
+    if (messages.value.length === 0 || messages.value[messages.value.length - 1].role !== 'assistant') {
+       // 请求未成功建立连接（或者刚 push 进去但还没来得及流式传输就报错了）
+       isLoading.value = false 
+       assistantMessage.content = errorMessage
+       messages.value.push(assistantMessage)
+    } else {
+       // 流传输中断
+       assistantMessage.content += networkErrorMsg
     }
-    
-    messages.value.push({
-      role: 'assistant',
-      content: errorMessage,
-      timestamp: new Date()
-    })
   } finally {
     isLoading.value = false
     nextTick(() => {
@@ -295,14 +364,13 @@ const scrollToBottom = () => {
   }
 }
 
-// 格式化消息内容（支持简单的Markdown和PPT预览按钮）
+// 格式化消息内容（支持 Markdown 和代码高亮）
 const formatMessage = (content) => {
   if (!content) {
     return ''
   }
-  // 直接替换换行符，内容中已经包含按钮HTML
-  const text = String(content)
-  return text.replace(/\n/g, '<br>')
+  // 使用 markdown-it 渲染
+  return md.render(String(content))
 }
 
 // 格式化时间
@@ -420,17 +488,6 @@ const handleVoiceConfirm = (text) => {
 
 
 
-// 组件卸载时清理定时器
-onUnmounted(() => {
-  if (typingTimer.value) {
-    clearTimeout(typingTimer.value)
-    typingTimer.value = null
-  }
-  if (recordingTimer.value) {
-    clearInterval(recordingTimer.value)
-    recordingTimer.value = null
-  }
-})
 </script>
 
 <style scoped>
@@ -577,11 +634,47 @@ onUnmounted(() => {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .sidebar-drawer {
-    width: 280px;
+    width: 80%; /* 移动端侧边栏宽度调整 */
+    max-width: 300px;
   }
   
   .main-chat.sidebar-open {
-    margin-left: 280px;
+    margin-left: 0; /* 移动端打开侧边栏时，主内容不移动，而是被遮罩 */
+  }
+
+  /* 移动端输入框区域调整 */
+  .input-container {
+    padding: 0.5rem;
+  }
+
+  .input-wrapper {
+    gap: 0.5rem;
+  }
+
+  .voice-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+
+  .message-input {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  .send-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  /* 移动端消息气泡调整 */
+  .message-content {
+    max-width: 85%;
+  }
+  
+  .message-text {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.95rem;
   }
 }
 
@@ -740,6 +833,101 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   word-wrap: break-word;
   line-height: 1.5;
+}
+
+/* Markdown 样式适配 */
+.message-text :deep(p) {
+  margin: 0.5em 0;
+}
+
+.message-text :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.message-text :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.message-text :deep(pre) {
+  background: #f6f8fa;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.message-text :deep(code) {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+}
+
+.message-text :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.message-text :deep(ul), .message-text :deep(ol) {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.message-text :deep(li) {
+  margin: 0.25em 0;
+}
+
+.message-text :deep(a) {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.message-text :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.message-text :deep(blockquote) {
+  margin: 0.5em 0;
+  padding-left: 1em;
+  border-left: 4px solid #dfe2e5;
+  color: #6a737d;
+}
+
+.message-text :deep(h1), .message-text :deep(h2), .message-text :deep(h3), 
+.message-text :deep(h4), .message-text :deep(h5), .message-text :deep(h6) {
+  margin: 0.75em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.message-text :deep(h1) { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+.message-text :deep(h2) { font-size: 1.3em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+.message-text :deep(h3) { font-size: 1.1em; }
+
+/* 用户消息中的 Markdown 样式适配 (深色背景) */
+.message-item.user .message-text :deep(code) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.message-item.user .message-text :deep(pre) {
+  background: rgba(0, 0, 0, 0.2);
+  color: #f8f8f2;
+}
+
+.message-item.user .message-text :deep(a) {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.message-item.user .message-text :deep(blockquote) {
+  border-left-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.message-item.user .message-text :deep(h1), .message-item.user .message-text :deep(h2) {
+  border-bottom-color: rgba(255, 255, 255, 0.3);
 }
 
 .message-item.user .message-text {

@@ -225,13 +225,27 @@ onMounted(() => {
     font-size: 2rem;
   }
 
+  .subtitle {
+    font-size: 1rem;
+    padding: 0 1rem;
+  }
+
+  .home-content {
+    padding: 1rem;
+    width: 100%;
+  }
+
   .action-buttons {
     flex-direction: column;
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
   }
 
   .btn {
     width: 100%;
     justify-content: center;
+    padding: 0.8rem;
   }
 }
 

@@ -51,9 +51,9 @@
         :key="index"
         :class="['message-item', message.role]"
       >
-        <div class="message-avatar">
+        <div :class="['message-avatar', { 'is-ai': message.role !== 'user' }]">
           <span v-if="message.role === 'user'">👤</span>
-          <span v-else>🤖</span>
+          <div v-else class="cat-avatar"></div>
         </div>
         <div class="message-content">
           <div class="message-text" v-html="formatMessage(message.content)" @click="handlePreviewClick"></div>
@@ -68,8 +68,8 @@
 
       <!-- 加载中提示 -->
       <div v-if="isLoading" class="message-item assistant">
-        <div class="message-avatar">
-          <span>🤖</span>
+        <div class="message-avatar is-ai">
+          <div class="cat-avatar"></div>
         </div>
         <div class="message-content">
           <div class="typing-indicator">
@@ -797,6 +797,24 @@ const handleVoiceConfirm = (text) => {
   flex-shrink: 0;
 }
 
+.message-avatar.is-ai {
+  background: transparent;
+  border-radius: 0;
+  width: 52px; /* 稍微调大一点，因为探头图片可能需要更大空间才好看 */
+  height: 52px;
+  margin-left: -6px; /* 修正因为变大导致的偏移 */
+}
+
+.cat-avatar {
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-image: url('/猫咪探头2-dark.svg');
+  transition: background-image 0.3s ease;
+}
+
 .message-item.user .message-avatar {
   background: #48bb78;
 }
@@ -1167,6 +1185,13 @@ const handleVoiceConfirm = (text) => {
   .history-btn .icon {
     font-size: 1.1rem;
   }
+}
+</style>
+
+<style>
+/* 全局样式适配暗黑模式 */
+[data-theme="dark"] .cat-avatar {
+  background-image: url('/猫咪探头2-light.svg') !important;
 }
 </style>
 

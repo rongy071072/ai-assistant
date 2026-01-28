@@ -1,94 +1,57 @@
 <template>
   <div v-if="isVisible" class="voice-modal-overlay" @click.self="handleClose">
     <div class="voice-modal">
-      <div class="voice-modal-header">
-        <h3>语音输入</h3>
-        <button class="close-btn" @click="handleClose">×</button>
-      </div>
-      
-      <div class="voice-modal-content">
-        <!-- 录音状态显示 -->
-        <div class="recording-status">
-          <div class="recording-indicator" :class="{ 'recording': isRecording, 'processing': isProcessing }">
-            <!-- 未录音状态：显示波浪线动画 -->
-            <div v-if="!isRecording && !isProcessing" class="idle-waves">
-              <svg class="wave-svg" viewBox="0 0 300 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-                <path class="wave-path wave-1" d="M0,40 Q25,20 50,40 T100,40 T150,40 T200,40 T250,40 T300,40" />
-                <path class="wave-path wave-2" d="M0,40 Q25,25 50,40 T100,40 T150,40 T200,40 T250,40 T300,40" />
-                <path class="wave-path wave-3" d="M0,40 Q25,30 50,40 T100,40 T150,40 T200,40 T250,40 T300,40" />
-              </svg>
+      <div class="voice-visualizer">
+        <!-- 核心动画区域 -->
+        <div class="visualizer-container" :class="statusClass">
+          <!-- 波纹层 -->
+          <div class="ripple ripple-1"></div>
+          <div class="ripple ripple-2"></div>
+          <div class="ripple ripple-3"></div>
+          
+          <!-- 中心圆球/主按钮 -->
+          <div class="core-circle" @click="toggleRecording">
+            <div class="core-icon">
+              <span v-if="isProcessing" class="icon-spin">⏳</span>
+              <img 
+                v-else 
+                src="/话筒.svg" 
+                class="mic-svg" 
+                alt="麦克风"
+              />
             </div>
-            
-            <!-- 录音中状态：显示麦克风图标和波形 -->
-            <div v-if="isRecording" class="mic-icon-wrapper">
-              <span class="mic-icon">🎤</span>
-              <div class="recording-waves">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-            
-            <!-- 处理中状态：显示加载图标 -->
-            <div v-if="isProcessing" class="processing-icon">
-              <span class="mic-icon">⏳</span>
-            </div>
-            
-            <p v-if="statusText" class="status-text">
-              {{ statusText }}
-            </p>
-            <p v-if="isRecording" class="recording-time">{{ formatTime(recordingTime) }}</p>
           </div>
         </div>
         
-        <!-- 识别结果显示 -->
-        <div v-if="recognizedText" class="recognized-text">
-          <p class="text-label">识别结果：</p>
-          <div class="text-content">{{ recognizedText }}</div>
+        <!-- 状态文本 -->
+        <div class="status-display">
+          <p class="main-status">{{ displayStatusText }}</p>
+          <p v-if="isRecording" class="timer">{{ formatTime(recordingTime) }}</p>
         </div>
+      </div>
+      
+      <!-- 识别结果实时展示 -->
+      <div class="result-area" :class="{ 'has-content': recognizedText }">
+        <div class="result-scroll">
+          {{ recognizedText || '说点什么吧...' }}
+          <span v-if="isRecording" class="cursor"></span>
+        </div>
+      </div>
+
+      <!-- 底部操作栏 -->
+      <div class="action-bar">
+        <button class="action-btn secondary" @click="handleClose">
+          取消
+        </button>
         
-        <!-- 操作按钮 -->
-        <div class="voice-actions">
-          <button 
-            v-if="!isRecording && !isProcessing"
-            class="start-btn"
-            @click="startRecording"
-          >
-            <span>🎙️</span> 开始讲话
-          </button>
-          
-          <button 
-            v-if="isRecording"
-            class="stop-btn"
-            @click="stopRecording"
-          >
-            <span>⏹️</span> 结束讲话
-          </button>
-          
-          <button 
-            v-if="isProcessing"
-            class="processing-btn"
-            disabled
-          >
-            <span>⏳</span> 识别中...
-          </button>
-          
-          <button 
-            v-if="recognizedText && !isRecording && !isProcessing"
-            class="confirm-btn"
-            @click="handleConfirm"
-          >
-            <span>✓</span> 确认使用
-          </button>
-          
-          <button 
-            v-if="recognizedText && !isRecording && !isProcessing"
-            class="cancel-btn"
-            @click="handleCancel"
-          >
-            <span>✕</span> 取消
-          </button>
-        </div>
+        <!-- 确认按钮仅在有内容时可用，或者在非录音状态下可用 -->
+        <button 
+          class="action-btn primary" 
+          :disabled="!recognizedText || isProcessing"
+          @click="handleConfirm"
+        >
+          确认发送
+        </button>
       </div>
     </div>
   </div>
@@ -124,16 +87,18 @@ const recordingTimer = ref(null)
 const connectionStatus = ref('idle') // idle, connecting, connected, recording, completed
 
 // 状态文本
-const statusText = computed(() => {
-  if (connectionStatus.value === 'connecting') {
-    return '正在连接...'
-  } else if (isProcessing.value) {
-    return '正在识别语音...'
-  } else if (isRecording.value) {
-    return '正在录音，请说话...'
-  } else {
-    return '' // 未录音时不显示文字，只显示波浪线
-  }
+const displayStatusText = computed(() => {
+  if (connectionStatus.value === 'connecting') return '正在连接...'
+  if (isProcessing.value) return '正在识别...'
+  if (isRecording.value) return '正在聆听...'
+  if (recognizedText.value) return '点击确认发送'
+  return '点击麦克风开始说话'
+})
+
+const statusClass = computed(() => {
+  if (isProcessing.value) return 'processing'
+  if (isRecording.value) return 'recording'
+  return 'idle'
 })
 
 // 监听visible变化，重置状态
@@ -169,6 +134,17 @@ const resetState = () => {
   }
 }
 
+// 切换录音状态
+const toggleRecording = () => {
+  if (isProcessing.value) return
+  
+  if (isRecording.value) {
+    stopRecording()
+  } else {
+    startRecording()
+  }
+}
+
 // 开始录音（使用WebSocket实时识别）
 const startRecording = async () => {
   try {
@@ -195,7 +171,8 @@ const startRecording = async () => {
     
     recognitionInstance.value.onError = (error) => {
       console.error('识别错误:', error)
-      alert('语音识别失败：' + (error.message || '未知错误'))
+      // alert('语音识别失败：' + (error.message || '未知错误')) // 移除alert，保持界面清爽
+      connectionStatus.value = 'idle'
       stopRecording()
     }
     
@@ -264,7 +241,7 @@ const stopRecording = () => {
     if (!recognizedText.value.trim()) {
       setTimeout(() => {
         if (!recognizedText.value.trim()) {
-          alert('未识别到语音内容，请重试')
+          // alert('未识别到语音内容，请重试')
           isProcessing.value = false
         }
       }, 1000)
@@ -280,11 +257,6 @@ const handleConfirm = () => {
     emit('confirm', recognizedText.value.trim())
     handleClose()
   }
-}
-
-// 取消
-const handleCancel = () => {
-  handleClose()
 }
 
 // 关闭弹窗
@@ -309,387 +281,295 @@ const formatTime = (seconds) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
+  z-index: 2000;
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .voice-modal {
-  background: #fff;
-  border-radius: 16px;
+  background: var(--bg-primary);
+  border-radius: 24px;
   width: 90%;
-  max-width: 500px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  animation: slideUp 0.3s ease;
+  max-width: 420px;
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   overflow: hidden;
-}
-
-.voice-modal-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  flex-direction: column;
 }
 
-.voice-modal-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1a202c;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: #718096;
-  cursor: pointer;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.close-btn:hover {
-  background: #f7fafc;
-  color: #2d3748;
-}
-
-.voice-modal-content {
-  padding: 2rem 1.5rem;
-}
-
-.recording-status {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.recording-indicator {
+/* 视觉化区域 */
+.voice-visualizer {
+  height: 240px;
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-}
-
-/* 未录音状态：波浪线动画 */
-.idle-waves {
-  width: 100%;
-  max-width: 300px;
-  height: 80px;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  margin: 0 auto;
-}
-
-.wave-svg {
-  width: 100%;
-  height: 100%;
-}
-
-.wave-path {
-  fill: none;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  transform-origin: 150px 40px;
-}
-
-.wave-1 {
-  stroke: #667eea;
-  animation: waveMove1 2s ease-in-out infinite;
-}
-
-.wave-2 {
-  stroke: #764ba2;
-  opacity: 0.7;
-  animation: waveMove2 2s ease-in-out infinite 0.3s;
-}
-
-.wave-3 {
-  stroke: #667eea;
-  opacity: 0.5;
-  animation: waveMove3 2s ease-in-out infinite 0.6s;
-}
-
-.mic-icon-wrapper {
   position: relative;
-  width: 100px;
-  height: 100px;
+  padding-top: 2rem;
+}
+
+.visualizer-container {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+/* 核心圆球 */
+.core-circle {
+  width: 80px;
+  height: 80px;
+  background: var(--brand-color);
+  border-radius: 50%;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--primary-gradient);
+}
+
+.core-circle:active {
+  transform: scale(0.95);
+}
+
+.core-icon {
+  font-size: 2rem;
+  color: #fff;
+  z-index: 11;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.processing-icon {
-  width: 100px;
-  height: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.mic-svg {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  filter: brightness(0) invert(1); /* 将黑色/彩色图标变为白色，以适应深色背景 */
 }
 
-.mic-icon {
-  font-size: 3rem;
-  display: block;
+/* 状态动画：Idle */
+.idle .core-circle {
+  animation: breathe 3s infinite ease-in-out;
 }
 
-.recording-indicator.recording .mic-icon-wrapper {
-  animation: pulse 1.5s ease-in-out infinite;
+/* 状态动画：Recording */
+.recording .core-circle {
+  transform: scale(1.1);
 }
 
-.recording-waves {
+.recording .ripple {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--brand-color);
+  opacity: 0;
+  z-index: 1;
+}
+
+.recording .ripple-1 {
   width: 100%;
   height: 100%;
+  animation: ripple 1.5s infinite linear;
+}
+
+.recording .ripple-2 {
+  width: 100%;
+  height: 100%;
+  animation: ripple 1.5s infinite linear 0.5s;
+}
+
+.recording .ripple-3 {
+  width: 100%;
+  height: 100%;
+  animation: ripple 1.5s infinite linear 1s;
+}
+
+/* 状态动画：Processing */
+.processing .core-circle {
+  background: var(--text-secondary);
+}
+
+.icon-spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+/* 文本状态 */
+.status-display {
+  text-align: center;
+  z-index: 10;
+}
+
+.main-status {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.timer {
+  font-size: 0.875rem;
+  font-family: monospace;
+  color: var(--brand-color);
+  background: rgba(79, 70, 229, 0.1);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* 结果展示区 */
+.result-area {
+  flex: 1;
+  min-height: 120px;
+  padding: 1rem 1.5rem;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
 }
 
-.recording-waves span {
-  width: 4px;
-  height: 40px;
-  background: #667eea;
-  border-radius: 2px;
-  animation: wave 1s ease-in-out infinite;
-}
-
-.recording-waves span:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.recording-waves span:nth-child(2) {
-  animation-delay: 0.2s;
-  height: 60px;
-}
-
-.recording-waves span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-.recording-indicator.processing .mic-icon {
-  animation: spin 2s linear infinite;
-}
-
-.status-text {
-  font-size: 1rem;
-  color: #4a5568;
-  margin: 0;
-}
-
-.recording-time {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #667eea;
-  margin: 0;
-  font-family: monospace;
-}
-
-.recognized-text {
-  margin-bottom: 2rem;
-  padding: 1rem;
-  background: #f7fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.text-label {
-  font-size: 0.875rem;
-  color: #718096;
-  margin: 0 0 0.5rem 0;
-}
-
-.text-content {
-  font-size: 1rem;
-  color: #2d3748;
+.result-scroll {
+  width: 100%;
+  max-height: 100px;
+  overflow-y: auto;
+  text-align: center;
+  font-size: 1.1rem;
   line-height: 1.6;
-  min-height: 60px;
+  color: var(--text-tertiary);
+  transition: color 0.3s;
 }
 
-.voice-actions {
+.result-area.has-content .result-scroll {
+  color: var(--text-primary);
+}
+
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: var(--brand-color);
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+/* 底部操作栏 */
+.action-bar {
+  padding: 1rem 1.5rem 1.5rem;
   display: flex;
-  gap: 0.75rem;
-  justify-content: center;
-  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
 }
 
-.voice-actions button {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 8px;
+.action-btn {
+  flex: 1;
+  padding: 0.875rem;
+  border-radius: 12px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   transition: all 0.2s;
+  border: none;
 }
 
-.start-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+.action-btn.secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
-.start-btn:hover {
+.action-btn.secondary:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+}
+
+.action-btn.primary {
+  background: var(--primary-gradient);
+  color: white;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  opacity: 0.9;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
 }
 
-.stop-btn {
-  background: #e53e3e;
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(229, 62, 62, 0.3);
-}
-
-.stop-btn:hover {
-  background: #c53030;
-  transform: translateY(-1px);
-}
-
-.processing-btn {
-  background: #cbd5e0;
-  color: #4a5568;
+.action-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  box-shadow: none;
 }
 
-.confirm-btn {
-  background: #48bb78;
-  color: #fff;
-}
-
-.confirm-btn:hover {
-  background: #38a169;
-  transform: translateY(-1px);
-}
-
-.cancel-btn {
-  background: #edf2f7;
-  color: #4a5568;
-  border: 1px solid #e2e8f0;
-}
-
-.cancel-btn:hover {
-  background: #e2e8f0;
-}
-
+/* 关键帧动画 */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(20px);
+  from { 
+    transform: translateY(40px) scale(0.95);
     opacity: 0;
   }
-  to {
-    transform: translateY(0);
+  to { 
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
+@keyframes breathe {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.2); }
+  50% { transform: scale(1.05); box-shadow: 0 0 20px 10px rgba(79, 70, 229, 0.2); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.2); }
 }
 
-@keyframes wave {
-  0%, 100% {
-    transform: scaleY(0.5);
+@keyframes ripple {
+  0% {
+    width: 80px;
+    height: 80px;
+    opacity: 0.8;
+    border-width: 4px;
   }
-  50% {
-    transform: scaleY(1);
+  100% {
+    width: 200px;
+    height: 200px;
+    opacity: 0;
+    border-width: 0px;
   }
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-@keyframes waveMove1 {
-  0%, 100% {
-    transform: scaleY(0.8) translateY(0);
-    opacity: 1;
-  }
-  50% {
-    transform: scaleY(1.2) translateY(-8px);
-    opacity: 0.8;
-  }
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
-@keyframes waveMove2 {
-  0%, 100% {
-    transform: scaleY(0.9) translateY(0);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scaleY(1.1) translateY(-6px);
-    opacity: 0.9;
-  }
-}
-
-@keyframes waveMove3 {
-  0%, 100% {
-    transform: scaleY(0.7) translateY(0);
-    opacity: 0.5;
-  }
-  50% {
-    transform: scaleY(1.0) translateY(-4px);
-    opacity: 0.7;
-  }
-}
-
-@media (max-width: 768px) {
-  .voice-modal {
-    width: 95%;
-    margin: 1rem;
-  }
-  
-  .voice-modal-content {
-    padding: 1.5rem 1rem;
-  }
-  
-  .mic-icon-wrapper {
-    width: 80px;
-    height: 80px;
-  }
-  
-  .mic-icon {
-    font-size: 2.5rem;
-  }
-  
-  .voice-actions {
-    flex-direction: column;
-  }
-  
-  .voice-actions button {
-    width: 100%;
-    justify-content: center;
-  }
+/* Dark Mode 适配 */
+@media (prefers-color-scheme: dark) {
+  /* 如果有系统级的暗色模式支持，可以在这里微调 */
 }
 </style>
-

@@ -85,7 +85,7 @@
     <div class="input-container">
       <div class="input-wrapper">
         <button class="voice-btn" @click="showVoiceModal = true" title="语音输入">
-          <span>🎤</span>
+          <img src="/话筒语音.svg" class="voice-icon" alt="语音输入" />
         </button>
         <textarea
           v-model="inputText"
@@ -240,6 +240,12 @@ const sendMessage = async () => {
       })
     })
 
+    if(response.status == 400||response.status == 401){
+      alert("登录超时，请重新登录")
+      localStorage.removeItem('userInfo')
+      router.push('/login')
+    }
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -289,7 +295,6 @@ const sendMessage = async () => {
 
   } catch (error) {
     console.error('发送消息失败:', error)
-    
     // 发生错误时，如果消息还未加入列表（即请求阶段就失败了），则加入并显示错误
     // 如果消息已加入列表（流传输中途中断），则追加错误信息
     
@@ -423,28 +428,6 @@ const formatHistoryTime = (timestamp) => {
   return `${date.getMonth() + 1}-${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-// 加载对话历史列表（模拟数据）
-const loadChatHistoryList = () => {
-  // 这里应该调用API获取历史会话列表
-  // 暂时使用模拟数据
-  chatHistory.value = [
-    {
-      id: 'session_1',
-      title: '养老方案咨询',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30分钟前
-    },
-    {
-      id: 'session_2', 
-      title: '健康体检分析',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2小时前
-    },
-    {
-      id: 'session_3',
-      title: '智慧助餐方案',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1天前
-    }
-  ]
-}
 
 // 开启新会话
 const startNewChat = async () => {
@@ -1032,6 +1015,12 @@ const handleVoiceConfirm = (text) => {
   background: var(--border-color);
   border-color: var(--border-hover);
   transform: scale(1.05);
+}
+
+.voice-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 
 .voice-btn:active {

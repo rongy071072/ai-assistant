@@ -15,7 +15,8 @@ const routes = [
   {
     path: '/chat/:id?',
     name: 'Chat',
-    component: Chat
+    component: Chat,
+    meta: { requiresAuth: true }
   },
   {
     path: '/login',
@@ -30,18 +31,39 @@ const routes = [
   {
     path: '/profile',
     name: 'Profile',
-    component: Profile
+    component: Profile,
+    meta: { requiresAuth: true }
   },
   {
     path: '/admin',
     name: 'Admin',
-    component: Admin
+    component: Admin,
+    meta: { requiresAuth: true }
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  const userInfo = localStorage.getItem('userInfo')
+  const isLoggedIn = !!userInfo
+
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    if (!isLoggedIn) {
+      next({
+        path: '/login',
+        query: { redirect: to.fullPath }
+      })
+    } else {
+      next()
+    }
+  } else {
+    next()
+  }
 })
 
 export default router

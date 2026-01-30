@@ -62,10 +62,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from "vue"
-import { useRouter } from "vue-router"
+import { useRouter, useRoute } from "vue-router"
 import { loginUser, getCaptcha } from "@/api/user"
 
 const router = useRouter()
+const route = useRoute()
 
 const loginForm = reactive({
   phone: "",
@@ -121,8 +122,9 @@ const handleLogin = async () => {
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
       // 显示成功消息
       alert('登录成功！')
-      // 登录成功后跳转到首页
-      router.push('/')
+      // 登录成功后跳转到来源页面或首页
+      const redirect = route.query.redirect || '/'
+      router.push(redirect)
     } else {
       alert(result.message)
       // 登录失败时刷新验证码

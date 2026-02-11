@@ -177,7 +177,7 @@ onMounted(async () => {
   //   currentSessionId.value = sessionStorage.getItem('sessionId')
   // }
   const userInfo = JSON.parse(localStorage.getItem('userInfo'))
-  userId.value = userInfo?.phone || null
+  userId.value = userInfo?.email || null
   
   inputRef.value?.focus()
 

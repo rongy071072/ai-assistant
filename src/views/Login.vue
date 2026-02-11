@@ -10,12 +10,12 @@
       <h1>登录</h1>
       <form @submit.prevent="handleLogin">
         <div class="form-group">
-          <label for="phone">账号</label>
+          <label for="email">邮箱</label>
           <input
-            id="phone"
-            v-model="loginForm.phone"
-            type="phone"
-            placeholder="请输入账号"
+            id="email"
+            v-model="loginForm.email"
+            type="email"
+            placeholder="请输入邮箱"
             required
           />
         </div>
@@ -31,110 +31,174 @@
           />
         </div>
 
-        <div class="form-group captcha-group">
-          <label for="captcha">验证码</label>
-          <div class="captcha-input-container">
-            <input
-              id="captcha"
-              v-model="loginForm.captcha"
-              type="text"
-              placeholder="请输入验证码"
-              required
-              maxlength="4"
-            />
-            <div class="captcha-image" @click="refreshCaptcha">
-              <img v-if="captchaImage" :src="captchaImage" alt="验证码" />
-              <div v-else class="captcha-placeholder">点击刷新</div>
-            </div>
-          </div>
+        <!-- Cloudflare Turnstile 人机验证 -->
+        <div class="form-group">
+          <label>人机验证</label>
+          <div ref="turnstileRef" class="turnstile-container"></div>
+          <span v-if="turnstileToken" class="turnstile-status success">人机验证已通过</span>
         </div>
 
-        <button type="submit" class="login-btn">登录</button>
+        <!-- 错误信息显示 -->
+        <div v-if="errorMessage" class="error-message">
+          {{ errorMessage }}
+        </div>
+
+        <button type="submit" class="login-btn" :disabled="isLoading">
+          {{ isLoading ? '登录中...' : '登录' }}
+        </button>
       </form>
       
-      <div class="footer-link">
-        <span>没有账号？</span>
-        <router-link to="/register" class="register-link">去注册</router-link>
+      <div class="footer-links">
+        <router-link to="/forgot-password" class="forgot-link">忘记密码？</router-link>
+        <div class="register-entry">
+          <span>没有账号？</span>
+          <router-link to="/register" class="register-link">去注册</router-link>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue"
+import { ref, reactive, onMounted, onUnmounted } from "vue"
 import { useRouter, useRoute } from "vue-router"
-import { loginUser, getCaptcha } from "@/api/user"
+import { loginUser } from "@/api/user"
+import { turnstileConfig } from "@/config"
 
 const router = useRouter()
 const route = useRoute()
 
 const loginForm = reactive({
-  phone: "",
-  password: "",
-  captcha: ""
+  email: "",
+  password: ""
 })
 
-// 验证码图片
-const captchaImage = ref("")
-const captchaId = ref("")
+// 加载状态
+const isLoading = ref(false)
+// 错误信息
+const errorMessage = ref("")
 
-// 获取验证码
-const refreshCaptcha = async () => {
-  try {
-    const result = await getCaptcha()
-    if (result.code === 200) {
-      // 假设后端返回base64格式的图片数据
-      captchaImage.value = result.data.captchaImage
-      captchaId.value = result.data.captchaId
-    } else {
-      console.error('获取验证码失败:', result.message)
-      alert('获取验证码失败，请重试')
+// Turnstile 相关
+const turnstileRef = ref(null)
+const turnstileToken = ref("")
+const turnstileWidgetId = ref(null)
+
+// 初始化 Turnstile
+const initTurnstile = () => {
+  const checkTurnstile = setInterval(() => {
+    if (window.turnstile && turnstileRef.value) {
+      clearInterval(checkTurnstile)
+      
+      try {
+        const siteKey = turnstileConfig.getSiteKey()
+        
+        turnstileWidgetId.value = window.turnstile.render(turnstileRef.value, {
+          sitekey: siteKey,
+          theme: 'light',
+          callback: (token) => {
+            turnstileToken.value = token
+          },
+          'error-callback': (errorCode) => {
+            console.error('Turnstile 验证失败，错误码:', errorCode)
+            turnstileToken.value = ""
+            errorMessage.value = '人机验证失败，请重新验证'
+            resetTurnstile()
+          },
+          'expired-callback': () => {
+            turnstileToken.value = ""
+            errorMessage.value = '人机验证已过期，请重新验证'
+            resetTurnstile()
+          },
+          'timeout-callback': () => {
+            turnstileToken.value = ""
+            errorMessage.value = '人机验证超时，正在重新加载...'
+            resetTurnstile()
+          }
+        })
+      } catch (error) {
+        console.error('Turnstile 初始化失败:', error)
+      }
     }
-  } catch (error) {
-    console.error('获取验证码失败:', error)
-    alert('获取验证码失败，请检查网络连接')
+  }, 100)
+  
+  setTimeout(() => clearInterval(checkTurnstile), 10000)
+}
+
+// 重置 Turnstile
+const resetTurnstile = () => {
+  if (window.turnstile && turnstileWidgetId.value !== null) {
+    try {
+      window.turnstile.reset(turnstileWidgetId.value)
+      turnstileToken.value = ""
+    } catch (error) {
+      console.error('重置 Turnstile 失败:', error)
+    }
   }
 }
 
 const handleLogin = async () => {
+  // 重置错误信息
+  errorMessage.value = ""
+
   // 表单验证
-  if (!loginForm.captcha.trim()) {
-    alert('请输入验证码')
+  if (!loginForm.email.trim()) {
+    errorMessage.value = "请输入邮箱"
+    return
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(loginForm.email)) {
+    errorMessage.value = "请输入有效的邮箱地址"
+    return
+  }
+  if (!loginForm.password.trim()) {
+    errorMessage.value = "请输入密码"
     return
   }
 
+  // 验证 Turnstile token
+  if (!turnstileToken.value) {
+    errorMessage.value = "请完成人机验证"
+    return
+  }
+
+  isLoading.value = true
+
   try {
-    // 调用登录API
-    const result = await loginUser(loginForm)
+    const result = await loginUser({
+      email: loginForm.email,
+      password: loginForm.password,
+      turnstileToken: turnstileToken.value
+    })
     const code = result.code
 
     if (code === 200) {
-      // 保存token到localStorage
+      // 保存用户信息到 localStorage
       const userInfo = {
         token: result.data.token,
         role: result.data.user.role,
         name: result.data.user.name,
         address: result.data.user.address,
-        phone: result.data.user.phone,
         email: result.data.user.email,
         lastLoginTime: result.data.user.lastLoginTime,
       }
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
-      // 显示成功消息
-      alert('登录成功！')
-      // 登录成功后跳转到来源页面或首页
+      // alert('登录成功！')
       const redirect = route.query.redirect || '/'
       router.push(redirect)
     } else {
-      alert(result.message)
-      // 登录失败时刷新验证码
-      refreshCaptcha()
+      errorMessage.value = result.message || "登录失败，请重试"
+      resetTurnstile()
     }
   } catch (error) {
     console.error('登录失败:', error)
-    alert('登录失败，请联系管理员...')
-    // 登录失败时刷新验证码
-    refreshCaptcha()
+    if (error.response && error.response.data) {
+      errorMessage.value = error.response.data.message || "登录失败，请联系管理员"
+    } else {
+      errorMessage.value = "登录失败，请检查网络连接"
+    }
+    resetTurnstile()
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -143,19 +207,31 @@ const goToHome = () => {
   router.push('/')
 }
 
-// 组件挂载时获取验证码
+// 组件挂载时初始化 Turnstile
 onMounted(() => {
-  refreshCaptcha()
-})</script>
+  initTurnstile()
+})
+
+// 组件卸载时清理 Turnstile
+onUnmounted(() => {
+  if (window.turnstile && turnstileWidgetId.value !== null) {
+    try {
+      window.turnstile.remove(turnstileWidgetId.value)
+    } catch (error) {
+      console.error('移除 Turnstile widget 失败:', error)
+    }
+  }
+})
+</script>
 
 <style lang="scss" scoped>
 .login-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh; /* 最小高度，内容多时自动扩展 */
+  min-height: 100vh;
   background: var(--primary-gradient);
-  padding: 40px 20px; /* 添加上下左右padding */
+  padding: 40px 20px;
 }
 
 .login-box {
@@ -250,55 +326,97 @@ onMounted(() => {
   transition: transform 0.2s, box-shadow 0.2s;
   margin-top: 10px;
 
-  &:hover {
+  &:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
   }
 
-  &:active {
+  &:active:not(:disabled) {
     transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 
-.captcha-group {
-  .captcha-input-container {
-    display: flex;
-    gap: 10px;
-    align-items: center;
+.error-message {
+  color: #e74c3c;
+  font-size: 14px;
+  text-align: center;
+  padding: 8px;
+  background: #fdf2f2;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+}
 
-    input {
-      flex: 1;
+.turnstile-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 65px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--input-bg);
+}
+
+.turnstile-status {
+  font-size: 12px;
+  margin-top: 4px;
+
+  &.success {
+    color: #27ae60;
+  }
+}
+
+.footer-links {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+
+  .forgot-link {
+    color: #667eea;
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.3s;
+
+    &:hover {
+      color: #5a67d8;
+      text-decoration: underline;
     }
+  }
 
-    .captcha-image {
-      width: 100px;
-      height: 40px;
-      border: 1px solid var(--border-color);
-      border-radius: 5px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--bg-tertiary);
-      transition: border-color 0.3s;
+  .register-entry {
+    font-size: 14px;
+    color: var(--text-secondary);
+
+    .register-link {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+      margin-left: 5px;
+      transition: color 0.3s;
 
       &:hover {
-        border-color: #667eea;
-      }
-
-      img {
-        width: 100%;
-        height: 100%;
-        border-radius: 4px;
-        object-fit: cover;
-      }
-
-      .captcha-placeholder {
-        color: var(--text-tertiary);
-        font-size: 12px;
-        text-align: center;
+        color: #5a67d8;
+        text-decoration: underline;
       }
     }
+  }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 15px 15px;
+  }
+  
+  .login-box {
+    padding: 25px 20px;
+    max-width: 100%;
   }
 }
 </style>

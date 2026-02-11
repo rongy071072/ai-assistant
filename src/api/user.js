@@ -37,7 +37,7 @@ export const updateUserInfo = (userData) => {
   })
 }
 
-// 获取验证码
+// 获取验证码（已废弃，改用邮箱验证码）
 export const getCaptcha = () => {
   return request({
     url: '/common_server/captcha/getCode',
@@ -46,11 +46,116 @@ export const getCaptcha = () => {
   })
 }
 
-// 判断是否是管理员
-export const checkUserRole = () => {
+// 发送邮箱验证码
+export const sendEmailCaptcha = (email) => {
+  const formData = new FormData()
+  formData.append('to', email)
   return request({
-    url: '/user/checkUserRole',
-    method: 'get',
+    url: '/common_server/email/sendCaptcha',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    raw: true  // 需要获取原始响应体，data 为 captchaId
+  })
+}
+
+// 验证邮箱验证码
+export const validateEmailCaptcha = (captchaId, captchaValue) => {
+  const formData = new FormData()
+  formData.append('captchaId', captchaId)
+  formData.append('captchaValue', captchaValue)
+  return request({
+    url: '/common_server/email/validate',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
     raw: true
+  })
+}
+
+// 重置密码（通过邮箱找回）
+export const resetPassword = (email,newPassword) => {
+  const formData = new FormData()
+  formData.append('email', email)
+  formData.append('newPassword', newPassword)
+  return request({
+    url: '/common_server/user/resetPw',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    raw: true
+  })
+}
+
+// 判断是否是管理员（与后端 /common_server/user/checkUserRole 一致）
+export const checkUserRole = (userId) => {
+  const formData = new FormData()
+  formData.append('userId', userId)
+  return request({
+    url: '/common_server/user/checkUserRole',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    raw: true
+  })
+}
+
+// 获取所有用户列表
+export const getAllUsers = () => {
+  return request({
+    url: '/common_server/user/getAllUsers',
+    method: 'get'
+  })
+}
+
+// 根据ID获取用户信息
+export const getUserById = (id) => {
+  const params = new URLSearchParams()
+  params.append('id', id)
+  return request({
+    url: '/common_server/user/getUserById',
+    method: 'post',
+    data: params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
+}
+
+// 审核注册申请（批量通过）
+export const reviewRegister = (ids) => {
+  const params = new URLSearchParams()
+  ids.forEach(id => params.append('ids', id))
+  return request({
+    url: '/common_server/user/reviewRegister',
+    method: 'post',
+    data: params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
+}
+
+// 获取待审核的注册申请列表
+export const getRegisterApply = () => {
+  return request({
+    url: '/common_server/user/getRegisterApply',
+    method: 'post'
+  })
+}
+
+// 获取对话数量
+export const getDialogCount = () => {
+  return request({
+    url: '/common_server/user/getDialogCount',
+    method: 'get'
   })
 }

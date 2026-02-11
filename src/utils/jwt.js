@@ -11,18 +11,20 @@ export function parseJwt(token) {
   }
 }
 
-// 从token获取用户ID
+// 从 token 获取用户 ID（ULID 字符串，兼容 sub / userId / id 等字段）
 export const getUserId = () => {
   const userInfo = localStorage.getItem('userInfo')
-  if (userInfo) {
-    try {
-      const user = JSON.parse(userInfo)
-      const token = user.token
-      const payload = parseJwt(token)
-      return Number(payload.sub);
-    } catch (e) {
-      return null
-    }
+  if (!userInfo) return null
+  try {
+    const user = JSON.parse(userInfo)
+    const token = user.token
+    if (!token) return null
+    const payload = parseJwt(token)
+    if (!payload) return null
+    const raw = payload.sub ?? payload.userId ?? payload.id
+    const id = raw != null ? String(raw).trim() : ''
+    return id || null
+  } catch (e) {
+    return null
   }
-  return null
 }

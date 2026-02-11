@@ -77,8 +77,13 @@ const startChat = () => {
 }
 
 // 前往管理员中心
-const goToAdmin = () => {
-  const token = JSON.parse(localStorage.getItem('userInfo')).token
+const goToAdmin = async () => {
+  const userInfoStr = localStorage.getItem('userInfo')
+  if (!userInfoStr) {
+    router.push('/login')
+    return
+  }
+  const token = JSON.parse(userInfoStr).token
   if (token === null || token === undefined || token === '') {
     router.push('/login')
     return
@@ -88,12 +93,21 @@ const goToAdmin = () => {
     return
   }
   const userId = getUserId()
-  const result = checkUserRole(userId)
-  if(result.data !== 'admin') {
-    alert('请不要耍小聪明！')
+  if (!userId) {
+    alert('无法获取用户信息，请重新登录')
     return
   }
-  router.push('/admin')
+  try {
+    const result = await checkUserRole(userId)
+    if (result?.data !== 'admin') {
+      alert('请不要耍小聪明！')
+      return
+    }
+    router.push('/admin')
+  } catch (e) {
+    console.error('校验管理员权限失败:', e)
+    alert('权限校验失败，请重试')
+  }
 }
 
 

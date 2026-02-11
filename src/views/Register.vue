@@ -32,17 +32,6 @@
         </div>
 
         <div class="form-group">
-          <label for="phone">手机号</label>
-          <input
-            id="phone"
-            v-model="registerForm.phone"
-            type="tel"
-            placeholder="请输入手机号"
-            required
-          />
-        </div>
-
-        <div class="form-group">
           <label for="address">地址</label>
           <input
             id="address"
@@ -64,28 +53,35 @@
           />
         </div>
 
+        <!-- Cloudflare Turnstile 人机验证（必须先通过才能发送邮箱验证码） -->
+        <div class="form-group">
+          <label>人机验证</label>
+          <div ref="turnstileRef" class="turnstile-container"></div>
+          <span v-if="turnstileToken" class="turnstile-status success">人机验证已通过</span>
+        </div>
+
         <div class="form-group captcha-group">
-          <label for="captcha">验证码</label>
+          <label for="captcha">邮箱验证码</label>
           <div class="captcha-input-container">
             <input
               id="captcha"
               v-model="registerForm.captcha"
               type="text"
-              placeholder="请输入验证码"
+              placeholder="请输入邮箱验证码"
               required
-              maxlength="4"
+              maxlength="6"
             />
-            <div class="captcha-image" @click="refreshCaptcha">
-              <img v-if="captchaImage" :src="captchaImage" alt="验证码" />
-              <div v-else class="captcha-placeholder">点击刷新</div>
-            </div>
+            <button
+              type="button"
+              class="send-captcha-btn"
+              :disabled="!turnstileToken || isSending || countdown > 0"
+              @click="sendCaptcha"
+              :title="!turnstileToken ? '请先完成人机验证' : ''"
+            >
+              {{ countdown > 0 ? `${countdown}s 后重新获取` : '获取验证码' }}
+            </button>
           </div>
-        </div>
-
-        <!-- Cloudflare Turnstile 人机验证 -->
-        <div class="form-group">
-          <label>人机验证</label>
-          <div ref="turnstileRef" class="turnstile-container"></div>
+          <span v-if="!turnstileToken" class="captcha-hint">请先完成上方人机验证后获取验证码</span>
         </div>
 
         <button type="submit" class="register-btn" :disabled="isLoading">
@@ -109,7 +105,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from "vue"
 import { useRouter } from "vue-router"
-import { registerUser, getCaptcha } from "@/api/user"
+import { registerUser, sendEmailCaptcha, validateEmailCaptcha } from "@/api/user"
 import { turnstileConfig } from "@/config"
 
 const router = useRouter()
@@ -117,7 +113,6 @@ const router = useRouter()
 const registerForm = reactive({
   name: "",
   password: "",
-  phone: "",
   address: "",
   email: "",
   captcha: ""
@@ -127,31 +122,67 @@ const registerForm = reactive({
 const isLoading = ref(false)
 // 错误信息
 const errorMessage = ref("")
-// 验证码图片
-const captchaImage = ref("")
+// 邮箱验证码相关
 const captchaId = ref("")
+const isSending = ref(false)
+const countdown = ref(0)
+let countdownTimer = null
 
 // Turnstile 相关
 const turnstileRef = ref(null)
 const turnstileToken = ref("")
 const turnstileWidgetId = ref(null)
 
-// 获取验证码
-const refreshCaptcha = async () => {
-  try {
-    const result = await getCaptcha()
-    if (result.code === 200) {
-      // 假设后端返回base64格式的图片数据
-      captchaImage.value = result.data.captchaImage
-      captchaId.value = result.data.captchaId
+// 开始倒计时（60秒）
+const startCountdown = () => {
+  countdown.value = 60
+  countdownTimer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
 
+// 发送邮箱验证码
+const sendCaptcha = async () => {
+  // 必须先通过人机验证
+  if (!turnstileToken.value) {
+    errorMessage.value = "请先完成人机验证"
+    return
+  }
+  // 校验邮箱是否填写
+  if (!registerForm.email.trim()) {
+    errorMessage.value = "请先输入邮箱地址"
+    return
+  }
+  // 邮箱格式验证
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(registerForm.email)) {
+    errorMessage.value = "请输入有效的邮箱地址"
+    return
+  }
+
+  isSending.value = true
+  errorMessage.value = ""
+
+  try {
+    const result = await sendEmailCaptcha(registerForm.email)
+    if (result.code === 200) {
+      // 后端返回的 data 即为 captchaId
+      captchaId.value = result.data
+      // 开始60秒倒计时
+      startCountdown()
+      errorMessage.value = ""
     } else {
-      console.error('获取验证码失败:', result.message)
-      errorMessage.value = '获取验证码失败，请重试'
+      errorMessage.value = result.message || "发送验证码失败，请重试"
     }
   } catch (error) {
-    console.error('获取验证码失败:', error)
-    errorMessage.value = '获取验证码失败，请检查网络连接'
+    console.error("发送验证码失败:", error)
+    errorMessage.value = "发送验证码失败，请检查网络连接"
+  } finally {
+    isSending.value = false
   }
 }
 
@@ -179,19 +210,27 @@ const initTurnstile = () => {
             console.log('✅ Turnstile 验证成功，Token:', token.substring(0, 20) + '...')
           },
           'error-callback': (errorCode) => {
-            // 验证失败后的回调
+            // 验证失败后的回调，自动重置让用户重新验证
             console.error('❌ Turnstile 验证失败，错误码:', errorCode)
-            errorMessage.value = '人机验证失败，请刷新页面重试'
+            turnstileToken.value = ""
+            errorMessage.value = '人机验证失败，请重新验证'
+            // 自动重置 Turnstile，无需刷新页面
+            resetTurnstile()
           },
           'expired-callback': () => {
             // token 过期后的回调
             console.log('⏰ Turnstile token 已过期')
             turnstileToken.value = ""
+            errorMessage.value = '人机验证已过期，请重新验证'
+            resetTurnstile()
           },
           'timeout-callback': () => {
-            // 超时后的回调
+            // 超时后的回调，自动重置让用户重试
             console.error('⏱️ Turnstile 验证超时')
-            errorMessage.value = '人机验证超时，请重试'
+            turnstileToken.value = ""
+            errorMessage.value = '人机验证超时，正在重新加载...'
+            // 自动重置 Turnstile
+            resetTurnstile()
           }
         })
       } catch (error) {
@@ -229,10 +268,6 @@ const handleRegister = async () => {
     errorMessage.value = "请输入密码"
     return
   }
-  if (!registerForm.phone.trim()) {
-    errorMessage.value = "请输入手机号"
-    return
-  }
   if (!registerForm.address.trim()) {
     errorMessage.value = "请输入地址"
     return
@@ -248,7 +283,11 @@ const handleRegister = async () => {
     return
   }
   if (!registerForm.captcha.trim()) {
-    errorMessage.value = "请输入验证码"
+    errorMessage.value = "请输入邮箱验证码"
+    return
+  }
+  if (!captchaId.value) {
+    errorMessage.value = "请先获取邮箱验证码"
     return
   }
   
@@ -262,26 +301,35 @@ const handleRegister = async () => {
   isLoading.value = true
 
   try {
-    // 调用注册API (将 Turnstile token 也发送给后端)
+    // 先验证邮箱验证码
+    const validateResult = await validateEmailCaptcha(captchaId.value, registerForm.captcha)
+    if (validateResult.code !== 200) {
+      errorMessage.value = validateResult.message || "验证码验证失败"
+      isLoading.value = false
+      return
+    }
+
+    // 验证码通过后，调用注册API (将 Turnstile token 也发送给后端)
     const result = await registerUser({
       name: registerForm.name,
       password: registerForm.password,
-      phone: registerForm.phone,
       address: registerForm.address,
       email: registerForm.email,
       captcha: registerForm.captcha,
+      captchaId: captchaId.value,
       turnstileToken: turnstileToken.value // 添加 Turnstile token
     })
 
-    // 处理成功响应
-    console.log("注册成功:", result)
-
-    // 可以在这里保存用户信息到本地存储或状态管理
-    // localStorage.setItem('userToken', result.token)
-    // localStorage.setItem('userInfo', JSON.stringify(result.user))
+    // 判断后端返回的业务状态码
+    if (result && result.code && result.code !== 200) {
+      errorMessage.value = result.message || "注册失败，请重试"
+      resetTurnstile()
+      return
+    }
 
     // 注册成功后跳转到登录页面
-    alert("注册成功！请登录")
+    console.log("注册成功:", result)
+    // alert("注册成功！请登录")
     router.push("/login")
 
   } catch (error) {
@@ -315,8 +363,7 @@ const handleRegister = async () => {
       errorMessage.value = "注册失败，请重试"
     }
 
-    // 注册失败时刷新验证码和重置 Turnstile
-    refreshCaptcha()
+    // 注册失败时重置 Turnstile
     resetTurnstile()
   } finally {
     // 无论成功还是失败，都要重置加载状态
@@ -331,12 +378,17 @@ const goToHome = () => {
 
 // 组件挂载时初始化
 onMounted(() => {
-  refreshCaptcha()
   initTurnstile()
 })
 
-// 组件卸载时清理 Turnstile
+// 组件卸载时清理 Turnstile 和倒计时定时器
 onUnmounted(() => {
+  // 清理倒计时定时器
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+  // 清理 Turnstile widget
   if (window.turnstile && turnstileWidgetId.value !== null) {
     try {
       window.turnstile.remove(turnstileWidgetId.value)
@@ -487,33 +539,33 @@ onUnmounted(() => {
       flex: 1;
     }
 
-    .captcha-image {
-      width: 100px;
-      height: 40px;
-      border: 1px solid var(--border-color);
+    .send-captcha-btn {
+      white-space: nowrap;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
       border-radius: 5px;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--bg-tertiary);
-      transition: border-color 0.3s;
+      transition: opacity 0.3s, transform 0.2s;
+      min-width: 130px;
+      text-align: center;
 
-      &:hover {
-        border-color: #667eea;
+      &:hover:not(:disabled) {
+        opacity: 0.9;
+        transform: translateY(-1px);
       }
 
-      img {
-        width: 100%;
-        height: 100%;
-        border-radius: 4px;
-        object-fit: cover;
+      &:active:not(:disabled) {
+        transform: translateY(0);
       }
 
-      .captcha-placeholder {
-        color: var(--text-tertiary);
-        font-size: 12px;
-        text-align: center;
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        background: #999;
       }
     }
   }
@@ -528,6 +580,21 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 5px;
   background: var(--input-bg);
+}
+
+.turnstile-status {
+  font-size: 12px;
+  margin-top: 4px;
+
+  &.success {
+    color: #27ae60;
+  }
+}
+
+.captcha-hint {
+  font-size: 12px;
+  color: #e67e22;
+  margin-top: 4px;
 }
 
 .footer-link {

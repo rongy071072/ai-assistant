@@ -50,6 +50,26 @@ export const authConfig = {
   }
 }
 
+// Cloudflare Turnstile 配置
+export const turnstileConfig = {
+  // 开发环境使用测试 Site Key（接受所有域名，总是验证成功）
+  devSiteKey: '1x00000000000000000000AA',
+  // 生产环境使用真实 Site Key
+  prodSiteKey: '0x4AAAAAACYUQ5qPo0_B59Sy',
+  
+  /**
+   * 获取当前环境的 Site Key
+   * @returns {string} Site Key
+   */
+  getSiteKey() {
+    // 根据环境变量或当前主机名判断
+    const isDev = import.meta.env.DEV || 
+                  window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1'
+    return isDev ? this.devSiteKey : this.prodSiteKey
+  }
+}
+
 // API配置
 export const apiConfig = {
   // 基础API路径

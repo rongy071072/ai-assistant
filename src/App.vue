@@ -50,13 +50,16 @@ initTheme()
 <style scoped>
 #app {
   width: 100%;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh; /* 改为 min-height，允许内容超出时扩展 */
+  overflow-y: auto; /* 允许垂直滚动 */
+  overflow-x: hidden; /* 禁止横向滚动 */
 }
 
 /* 为有导航栏的页面添加顶部间距 */
 #app.has-navbar {
   padding-top: 60px;
+  height: 100vh; /* 有导航栏的页面固定高度 */
+  overflow: hidden; /* 有导航栏的页面内部组件自己处理滚动 */
 }
 </style>
 

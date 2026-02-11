@@ -82,6 +82,12 @@
           </div>
         </div>
 
+        <!-- Cloudflare Turnstile 人机验证 -->
+        <div class="form-group">
+          <label>人机验证</label>
+          <div ref="turnstileRef" class="turnstile-container"></div>
+        </div>
+
         <button type="submit" class="register-btn" :disabled="isLoading">
           {{ isLoading ? '注册中...' : '注册' }}
         </button>
@@ -101,9 +107,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue"
+import { ref, reactive, onMounted, onUnmounted } from "vue"
 import { useRouter } from "vue-router"
 import { registerUser, getCaptcha } from "@/api/user"
+import { turnstileConfig } from "@/config"
 
 const router = useRouter()
 
@@ -124,6 +131,11 @@ const errorMessage = ref("")
 const captchaImage = ref("")
 const captchaId = ref("")
 
+// Turnstile 相关
+const turnstileRef = ref(null)
+const turnstileToken = ref("")
+const turnstileWidgetId = ref(null)
+
 // 获取验证码
 const refreshCaptcha = async () => {
   try {
@@ -140,6 +152,67 @@ const refreshCaptcha = async () => {
   } catch (error) {
     console.error('获取验证码失败:', error)
     errorMessage.value = '获取验证码失败，请检查网络连接'
+  }
+}
+
+// 初始化 Turnstile
+const initTurnstile = () => {
+  // 等待 Turnstile API 加载
+  const checkTurnstile = setInterval(() => {
+    if (window.turnstile && turnstileRef.value) {
+      clearInterval(checkTurnstile)
+      
+      try {
+        // 获取当前环境的 Site Key
+        const siteKey = turnstileConfig.getSiteKey()
+        console.log(`Turnstile 使用 Site Key: ${siteKey}`)
+        console.log(`当前环境: ${import.meta.env.DEV ? '开发环境' : '生产环境'}`)
+        console.log(`当前主机名: ${window.location.hostname}`)
+        
+        // 渲染 Turnstile widget
+        turnstileWidgetId.value = window.turnstile.render(turnstileRef.value, {
+          sitekey: siteKey,
+          theme: 'light',
+          callback: (token) => {
+            // 验证成功后的回调
+            turnstileToken.value = token
+            console.log('✅ Turnstile 验证成功，Token:', token.substring(0, 20) + '...')
+          },
+          'error-callback': (errorCode) => {
+            // 验证失败后的回调
+            console.error('❌ Turnstile 验证失败，错误码:', errorCode)
+            errorMessage.value = '人机验证失败，请刷新页面重试'
+          },
+          'expired-callback': () => {
+            // token 过期后的回调
+            console.log('⏰ Turnstile token 已过期')
+            turnstileToken.value = ""
+          },
+          'timeout-callback': () => {
+            // 超时后的回调
+            console.error('⏱️ Turnstile 验证超时')
+            errorMessage.value = '人机验证超时，请重试'
+          }
+        })
+      } catch (error) {
+        console.error('💥 Turnstile 初始化失败:', error)
+      }
+    }
+  }, 100)
+  
+  // 10秒后停止检查
+  setTimeout(() => clearInterval(checkTurnstile), 10000)
+}
+
+// 重置 Turnstile
+const resetTurnstile = () => {
+  if (window.turnstile && turnstileWidgetId.value !== null) {
+    try {
+      window.turnstile.reset(turnstileWidgetId.value)
+      turnstileToken.value = ""
+    } catch (error) {
+      console.error('重置 Turnstile 失败:', error)
+    }
   }
 }
 
@@ -178,22 +251,26 @@ const handleRegister = async () => {
     errorMessage.value = "请输入验证码"
     return
   }
+  
+  // 验证 Turnstile token
+  if (!turnstileToken.value) {
+    errorMessage.value = "请完成人机验证"
+    return
+  }
 
   // 设置加载状态
   isLoading.value = true
 
-  // 校验验证码
-  
-
   try {
-    // 调用注册API
+    // 调用注册API (将 Turnstile token 也发送给后端)
     const result = await registerUser({
       name: registerForm.name,
       password: registerForm.password,
       phone: registerForm.phone,
       address: registerForm.address,
       email: registerForm.email,
-      captcha: registerForm.captcha
+      captcha: registerForm.captcha,
+      turnstileToken: turnstileToken.value // 添加 Turnstile token
     })
 
     // 处理成功响应
@@ -238,8 +315,9 @@ const handleRegister = async () => {
       errorMessage.value = "注册失败，请重试"
     }
 
-    // 注册失败时刷新验证码
+    // 注册失败时刷新验证码和重置 Turnstile
     refreshCaptcha()
+    resetTurnstile()
   } finally {
     // 无论成功还是失败，都要重置加载状态
     isLoading.value = false
@@ -251,9 +329,21 @@ const goToHome = () => {
   router.push('/')
 }
 
-// 组件挂载时获取验证码
+// 组件挂载时初始化
 onMounted(() => {
   refreshCaptcha()
+  initTurnstile()
+})
+
+// 组件卸载时清理 Turnstile
+onUnmounted(() => {
+  if (window.turnstile && turnstileWidgetId.value !== null) {
+    try {
+      window.turnstile.remove(turnstileWidgetId.value)
+    } catch (error) {
+      console.error('移除 Turnstile widget 失败:', error)
+    }
+  }
 })
 </script>
 
@@ -261,9 +351,10 @@ onMounted(() => {
 .register-container {
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+  align-items: center; /* 恢复居中对齐 */
+  min-height: 100vh; /* 最小高度100vh，内容多时会自动扩展 */
   background: var(--primary-gradient);
+  padding: 40px 20px; /* 上下左右都有padding */
 }
 
 .register-box {
@@ -273,6 +364,7 @@ onMounted(() => {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 400px;
+  /* 移除 margin: auto 0，让 flex 居中处理 */
 
   h1 {
     text-align: center;
@@ -424,6 +516,73 @@ onMounted(() => {
         text-align: center;
       }
     }
+  }
+}
+
+.turnstile-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 65px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--input-bg);
+}
+
+.footer-link {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+
+  .login-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    margin-left: 5px;
+    transition: color 0.3s;
+
+    &:hover {
+      color: #5a67d8;
+      text-decoration: underline;
+    }
+  }
+}
+
+// 响应式样式
+@media (max-height: 800px) {
+  .register-container {
+    padding: 20px 20px; // 小屏幕减少上下padding
+  }
+  
+  .register-box {
+    padding: 30px; // 减少内边距
+    margin: 0; // 移除自动居中，让内容从顶部开始
+    
+    h1 {
+      margin-bottom: 20px; // 减少标题下边距
+      font-size: 24px; // 减小字体
+    }
+    
+    form {
+      gap: 16px; // 减少表单项之间的间距
+    }
+  }
+  
+  .form-group {
+    gap: 6px; // 减少标签和输入框之间的间距
+  }
+}
+
+@media (max-width: 480px) {
+  .register-container {
+    padding: 15px 15px;
+  }
+  
+  .register-box {
+    padding: 25px 20px;
+    max-width: 100%;
   }
 }
 </style>

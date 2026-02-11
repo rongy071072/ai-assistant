@@ -153,8 +153,9 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  min-height: 100vh; /* 最小高度，内容多时自动扩展 */
   background: var(--primary-gradient);
+  padding: 40px 20px; /* 添加上下左右padding */
 }
 
 .login-box {

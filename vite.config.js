@@ -11,6 +11,7 @@ export default defineConfig({
     }
   },
   server: {
+    host: 'localhost', // 明确使用 localhost，确保与 Turnstile 配置的 hostname 匹配
     port: 3000,
     proxy: {
       '/api': {

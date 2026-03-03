@@ -166,21 +166,14 @@ const userId = ref(null)
 
 // 加载对话记录
 onMounted(async () => {
-  // // 加载历史会话列表
-  // loadChatHistoryList()
   currentSessionId.value = chatStore.getCurrentSessionId()
-  // const sessionId = sessionStorage.getItem('sessionId')
-  // if(sessionId){
-  //   currentSessionId.value = sessionId
-  // }else{
-  //   sessionStorage.setItem('sessionId', chatStore.generateSessionId())
-  //   currentSessionId.value = sessionStorage.getItem('sessionId')
-  // }
   const userInfo = JSON.parse(localStorage.getItem('userInfo'))
   userId.value = userInfo?.email || null
-  
-  inputRef.value?.focus()
 
+  // 加载历史会话列表
+  await loadHistoryList()
+
+  inputRef.value?.focus()
 })
 
 // 监听消息变化，自动滚动到底部
@@ -293,23 +286,19 @@ const sendMessage = async () => {
       }
     }
 
+    // 流结束后刷新侧边栏历史列表
+    loadHistoryList()
+
   } catch (error) {
     console.error('发送消息失败:', error)
-    // 发生错误时，如果消息还未加入列表（即请求阶段就失败了），则加入并显示错误
-    // 如果消息已加入列表（流传输中途中断），则追加错误信息
-    
     const errorMessage = '抱歉，发送消息时出现错误，请稍后重试。'
     const networkErrorMsg = '\n\n[网络连接异常或请求超时]'
 
-    // 检查消息是否已在列表中（通过引用比较可能不准确，因为 push 进去的是 Proxy）
-    // 这里简单判断 assistantMessage.content 是否为空来决定是否是初始请求失败
     if (messages.value.length === 0 || messages.value[messages.value.length - 1].role !== 'assistant') {
-       // 请求未成功建立连接（或者刚 push 进去但还没来得及流式传输就报错了）
-       isLoading.value = false 
+       isLoading.value = false
        assistantMessage.content = errorMessage
        messages.value.push(assistantMessage)
     } else {
-       // 流传输中断
        assistantMessage.content += networkErrorMsg
     }
   } finally {
@@ -322,19 +311,40 @@ const sendMessage = async () => {
 }
 
 
-// 加载对话历史
-const loadChatHistory = async (id) => {
+// 获取对话历史列表（侧边栏）
+const loadHistoryList = async () => {
+  if (!userId.value) return
   try {
-    const response = await chatApi.getChatHistory(id)
-    // 如果返回了消息列表，则加载
-    if (response && (response.messages || response.data)) {
-      messages.value = response.messages || response.data || []
+    const data = await chatApi.getHistoryList(userId.value)
+    if (data && Array.isArray(data.historyList)) {
+      // 将接口数据映射为组件所需的统一格式
+      chatHistory.value = data.historyList.map(item => ({
+        id: item.session_id,
+        title: item.first_content || '新对话',
+        timestamp: null
+      }))
     }
   } catch (error) {
-    // 静默处理错误，不显示错误信息（因为后端接口可能还未实现）
-    // 如果接口不存在或失败，不影响新对话的创建和使用
-    console.log('对话历史接口暂未实现，跳过加载历史记录')
-    // 清空消息列表，开始新对话
+    console.error('获取对话历史列表失败:', error)
+  }
+}
+
+// 加载指定会话的消息详情
+const loadChatHistory = async (sessionId) => {
+  if (!userId.value || !sessionId) return
+  try {
+    const data = await chatApi.getHistory(userId.value, sessionId)
+    if (Array.isArray(data)) {
+      messages.value = data
+        .filter(msg => msg.content)
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date()
+        }))
+    }
+  } catch (error) {
+    console.error('获取对话详情失败:', error)
     messages.value = []
   }
 }
@@ -376,32 +386,22 @@ const toggleSidebar = () => {
 // 切换到指定会话
 const switchSession = async (sessionId) => {
   if (sessionId === currentSessionId.value) return
-  
+
   currentSessionId.value = sessionId
-  chatId.value = sessionId
-  chatStore.setCurrentChatId(sessionId)
-  
-  // 加载选中会话的消息
+  chatStore.setCurrentSessionId(sessionId)
+
+  // 加载选中会话的消息详情
   await loadChatHistory(sessionId)
-  
-  // 关闭侧边栏（在移动端）
+
+  // 移动端自动收起侧边栏
   if (window.innerWidth < 768) {
     showSidebar.value = false
   }
 }
 
-// 创建新会话
-const createNewSession = async () => {
-  // 清空当前消息
-  messages.value = []
-  // 创建新会话
-  await createNewChat()
-  // 关闭侧边栏
-  showSidebar.value = false
-}
-
 // 格式化历史记录时间
 const formatHistoryTime = (timestamp) => {
+  if (!timestamp) return ''
   const date = new Date(timestamp)
   const now = new Date()
   const diff = now - date

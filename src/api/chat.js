@@ -90,6 +90,33 @@ export const chatApi = {
       method: 'put',
       data: { title }
     })
+  },
+
+  /**
+   * 获取对话历史列表
+   * @param {string} userId - 用户ID（邮箱）
+   * @returns {Promise<{historyList: Array<{first_content: string, session_id: string}>}>}
+   */
+  getHistoryList(userId) {
+    return request({
+      url: '/common_server/agent/getHistoryList',
+      method: 'get',
+      params: { userId }
+    })
+  },
+
+  /**
+   * 获取指定会话的对话详情
+   * @param {string} userId - 用户ID（邮箱）
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<Array<{content: string, role: string}>>}
+   */
+  getHistory(userId, sessionId) {
+    return request({
+      url: '/common_server/agent/getHistory',
+      method: 'get',
+      params: { userId, sessionId }
+    })
   }
 }
 

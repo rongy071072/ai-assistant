@@ -77,6 +77,14 @@ export const useChatStore = defineStore('chat', {
     },
 
     /**
+     * 设置当前SessionID
+     * @param {string} sessionId - SessionID
+     */
+    setCurrentSessionId(sessionId) {
+      this.currentSessionId = sessionId
+    },
+
+    /**
      * 设置对话列表
      * @param {Array} list - 对话列表
      */

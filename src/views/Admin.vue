@@ -112,14 +112,22 @@
         <div class="table-header">
           <h2>注册审核</h2>
           <div class="header-actions">
-            <button
-              v-if="selectedIds.length > 0"
-              class="btn btn-approve"
-              @click="batchApprove"
-              :disabled="reviewing"
-            >
-              {{ reviewing ? '审核中...' : `批量通过 (${selectedIds.length})` }}
-            </button>
+            <template v-if="selectedIds.length > 0">
+              <button
+                class="btn btn-approve"
+                @click="batchApprove"
+                :disabled="reviewing"
+              >
+                {{ reviewing ? '审核中...' : `批量通过 (${selectedIds.length})` }}
+              </button>
+              <button
+                class="btn btn-reject"
+                @click="batchReject"
+                :disabled="reviewing"
+              >
+                {{ reviewing ? '审核中...' : `批量拒绝 (${selectedIds.length})` }}
+              </button>
+            </template>
             <button class="btn btn-refresh" @click="fetchRegisterApply" :disabled="reviewLoading">
               {{ reviewLoading ? '加载中...' : '刷新' }}
             </button>
@@ -173,6 +181,13 @@
                     :disabled="reviewing"
                   >
                     通过
+                  </button>
+                  <button
+                    class="btn-action btn-reject-single"
+                    @click="rejectSingle(apply.id)"
+                    :disabled="reviewing"
+                  >
+                    拒绝
                   </button>
                   <button class="btn-action btn-detail" @click="viewUserDetail(apply.id)">
                     详情
@@ -419,20 +434,40 @@ const toggleSelectAll = () => {
  */
 const batchApprove = async () => {
   if (selectedIds.value.length === 0) return
-  const confirmMsg = `确定要通过 ${selectedIds.value.length} 个注册申请吗？`
-  if (!confirm(confirmMsg)) return
+  if (!confirm(`确定要通过 ${selectedIds.value.length} 个注册申请吗？`)) return
 
   reviewing.value = true
   try {
-    await reviewRegister(selectedIds.value)
+    await reviewRegister(selectedIds.value, '1')
     showToast(`成功通过 ${selectedIds.value.length} 个注册申请`)
     selectedIds.value = []
-    // 刷新列表
     await fetchRegisterApply()
     await fetchAllUsers()
   } catch (error) {
-    console.error('审核失败:', error)
+    console.error('批量审核通过失败:', error)
     showToast('审核失败: ' + (error.message || '未知错误'), 'error')
+  } finally {
+    reviewing.value = false
+  }
+}
+
+/**
+ * 批量审核拒绝
+ */
+const batchReject = async () => {
+  if (selectedIds.value.length === 0) return
+  if (!confirm(`确定要拒绝 ${selectedIds.value.length} 个注册申请吗？`)) return
+
+  reviewing.value = true
+  try {
+    await reviewRegister(selectedIds.value, '2')
+    showToast(`已拒绝 ${selectedIds.value.length} 个注册申请`)
+    selectedIds.value = []
+    await fetchRegisterApply()
+    await fetchAllUsers()
+  } catch (error) {
+    console.error('批量审核拒绝失败:', error)
+    showToast('操作失败: ' + (error.message || '未知错误'), 'error')
   } finally {
     reviewing.value = false
   }
@@ -447,14 +482,34 @@ const approveSingle = async (id) => {
 
   reviewing.value = true
   try {
-    await reviewRegister([id])
+    await reviewRegister([id], '1')
     showToast('审核通过成功')
-    // 刷新列表
     await fetchRegisterApply()
     await fetchAllUsers()
   } catch (error) {
-    console.error('审核失败:', error)
+    console.error('审核通过失败:', error)
     showToast('审核失败: ' + (error.message || '未知错误'), 'error')
+  } finally {
+    reviewing.value = false
+  }
+}
+
+/**
+ * 单个审核拒绝
+ * @param {string} id - 申请ID
+ */
+const rejectSingle = async (id) => {
+  if (!confirm('确定要拒绝该注册申请吗？')) return
+
+  reviewing.value = true
+  try {
+    await reviewRegister([id], '2')
+    showToast('已拒绝该注册申请')
+    await fetchRegisterApply()
+    await fetchAllUsers()
+  } catch (error) {
+    console.error('审核拒绝失败:', error)
+    showToast('操作失败: ' + (error.message || '未知错误'), 'error')
   } finally {
     reviewing.value = false
   }
@@ -737,6 +792,20 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+.btn-reject-single {
+  background: #fde8e8;
+  color: #dc3545;
+}
+
+.btn-reject-single:hover {
+  background: #fad0d0;
+}
+
+.btn-reject-single:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* 通用按钮 */
 .btn {
   padding: 0.5rem 1.2rem;
@@ -783,6 +852,15 @@ onMounted(async () => {
 
 .btn-approve:hover {
   background: #218838;
+}
+
+.btn-reject {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-reject:hover {
+  background: #c82333;
 }
 
 /* 加载状态 */

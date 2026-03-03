@@ -130,10 +130,15 @@ export const getUserById = (id) => {
   })
 }
 
-// 审核注册申请（批量通过）
-export const reviewRegister = (ids) => {
+/**
+ * 审核注册申请
+ * @param {string[]} ids - 申请ID列表
+ * @param {string} status - '1' 审核通过 / '2' 审核不通过
+ */
+export const reviewRegister = (ids, status) => {
   const params = new URLSearchParams()
   ids.forEach(id => params.append('ids', id))
+  params.append('status', status)
   return request({
     url: '/common_server/user/reviewRegister',
     method: 'post',

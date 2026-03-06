@@ -329,10 +329,14 @@ const sendMessage = async () => {
         try {
           const data = JSON.parse(dataStr)
           // 提取内容，根据实际后端返回结构调整
-          const content = data.content || data.data || ''
+          let content = data.content || data.data || ''
           
+          if (content && typeof content === 'object') {
+            content = content.text || content.content || JSON.stringify(content)
+          }
+
           if (content) {
-            assistantMessage.content += content
+            assistantMessage.content += String(content)
           }
         } catch (e) {
           console.warn('解析SSE数据失败:', e, dataStr)
@@ -394,11 +398,27 @@ const loadChatHistory = async (sessionId) => {
     if (Array.isArray(data)) {
       messages.value = data
         .filter(msg => msg.content)
-        .map(msg => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date()
-        }))
+        .map(msg => {
+          let content = msg.content
+          
+          // 处理 content 为数组的情况 (e.g. [{text: "...", type: "text"}])
+          if (Array.isArray(content)) {
+            content = content
+              .filter(item => item && item.type === 'text')
+              .map(item => item.text)
+              .join('')
+          }
+          // 处理 content 为对象的情况
+          else if (content && typeof content === 'object') {
+            // 尝试常见字段名：text, content, message, answer
+            content = content.text || content.content || content.message || content.answer || JSON.stringify(content)
+          }
+          return {
+            role: msg.role,
+            content: String(content || ''), // 确保是字符串
+            timestamp: new Date()
+          }
+        })
     }
   } catch (error) {
     console.error('获取对话详情失败:', error)
@@ -514,28 +534,56 @@ const handleFileSelect = async (event) => {
   const files = Array.from(event.target.files)
   // 重置 input 值，允许重复选择同一文件
   event.target.value = ''
+  
+  if (files.length === 0) return
 
+  // 1. 创建本地预览项并添加到列表
+  const newEntries = []
   for (const file of files) {
     const localPreview = URL.createObjectURL(file)
     // 用 reactive 包装以便直接通过引用修改属性
     const entry = reactive({ url: null, localPreview, name: file.name, uploading: true })
+    newEntries.push(entry)
     uploadedFiles.value.push(entry)
+  }
 
-    try {
-      const ossUrl = await chatApi.uploadFile(file)
-      // 校验返回值：必须是以 http 开头的字符串，否则视为业务失败
-      if (typeof ossUrl !== 'string' || !ossUrl.startsWith('http')) {
-        throw new Error(typeof ossUrl === 'object' && ossUrl?.message ? ossUrl.message : '上传失败，返回格式异常')
-      }
-      entry.url = ossUrl
-      entry.uploading = false
-    } catch (err) {
-      console.error('图片上传失败:', err)
-      URL.revokeObjectURL(localPreview)
-      // 通过引用查找下标，避免多文件时下标偏移
-      const currentIdx = uploadedFiles.value.indexOf(entry)
-      if (currentIdx !== -1) uploadedFiles.value.splice(currentIdx, 1)
+  // 2. 批量上传
+  try {
+    const ossUrls = await chatApi.batchUploadFiles(files)
+    
+    // 校验返回值：必须是数组且长度一致
+    if (!Array.isArray(ossUrls) || ossUrls.length !== files.length) {
+      throw new Error('上传返回数据异常或数量不匹配')
     }
+
+    // 3. 更新上传状态和 URL
+    newEntries.forEach((entry, index) => {
+      const url = ossUrls[index]
+      if (typeof url === 'string' && url.startsWith('http')) {
+        entry.url = url
+        entry.uploading = false
+      } else {
+        // 单个文件失败处理逻辑（视具体业务需求，这里简单标记失败或移除）
+        console.warn(`文件 ${entry.name} 上传返回 URL 异常:`, url)
+        // 移除该文件预览
+        const idx = uploadedFiles.value.indexOf(entry)
+        if (idx !== -1) {
+          uploadedFiles.value.splice(idx, 1)
+          if (entry.localPreview) URL.revokeObjectURL(entry.localPreview)
+        }
+      }
+    })
+  } catch (err) {
+    console.error('批量上传失败:', err)
+    // 移除所有本次尝试上传的文件预览
+    newEntries.forEach(entry => {
+      const idx = uploadedFiles.value.indexOf(entry)
+      if (idx !== -1) {
+        uploadedFiles.value.splice(idx, 1)
+        if (entry.localPreview) URL.revokeObjectURL(entry.localPreview)
+      }
+    })
+    alert(`图片上传失败: ${err.message || '未知错误'}`)
   }
 }
 

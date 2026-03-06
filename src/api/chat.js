@@ -117,6 +117,29 @@ export const chatApi = {
       method: 'get',
       params: { userId, sessionId }
     })
+  },
+
+  /**
+   * 上传文件到 OSS
+   * @param {File} file - 要上传的文件对象
+   * @returns {Promise<string>} 返回文件的 OSS 访问 URL
+   *
+   * 注意：axios 实例默认 Content-Type 为 application/json，发送 FormData
+   * 时必须通过 transformRequest 删除该默认头，让浏览器自动补全
+   * multipart/form-data; boundary=... 才能被服务端正常解析。
+   */
+  uploadFile(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request({
+      url: '/common_server/oss/upload',
+      method: 'post',
+      data: formData,
+      transformRequest: [(data, headers) => {
+        delete headers['Content-Type']
+        return data
+      }]
+    })
   }
 }
 

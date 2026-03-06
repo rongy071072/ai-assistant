@@ -57,11 +57,16 @@
         </div>
         <div class="message-content">
           <div class="message-text" v-html="formatMessage(message.content)" @click="handlePreviewClick"></div>
-
-          <!-- 打字机输出中的提示 - 已移除 -->
-          <!-- <div v-if="message.typing" class="typing-indicator-small">
-            <span>正在生成方案...</span>
-          </div> -->
+          <!-- 消息附件图片 -->
+          <div v-if="message.images && message.images.length > 0" class="message-images">
+            <img
+              v-for="(imgUrl, imgIdx) in message.images"
+              :key="imgIdx"
+              :src="imgUrl"
+              class="message-image"
+              @click="openImagePreview(imgUrl)"
+            />
+          </div>
           <div class="message-time">{{ formatTime(message.timestamp) }}</div>
         </div>
       </div>
@@ -83,7 +88,38 @@
 
     <!-- 输入区域 -->
     <div class="input-container">
+      <!-- 已上传图片预览区 -->
+      <div v-if="uploadedFiles.length > 0" class="upload-preview-area">
+        <div
+          v-for="(file, idx) in uploadedFiles"
+          :key="idx"
+          class="upload-preview-item"
+        >
+          <div v-if="file.uploading" class="upload-uploading">
+            <div class="upload-spinner"></div>
+          </div>
+          <img v-else :src="file.localPreview" class="upload-preview-img" :title="file.name" />
+          <button class="upload-remove-btn" @click="removeUploadedFile(idx)" :disabled="file.uploading">✕</button>
+        </div>
+      </div>
+      <!-- 隐藏的文件选择框 -->
+      <input
+        type="file"
+        ref="fileInputRef"
+        accept="image/*"
+        multiple
+        style="display: none"
+        @change="handleFileSelect"
+      />
       <div class="input-wrapper">
+        <!-- 附件上传按钮 -->
+        <button class="attach-btn" @click="fileInputRef.click()" title="上传图片" :disabled="isLoading">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
         <button class="voice-btn" @click="showVoiceModal = true" title="语音输入">
           <img src="/话筒语音.svg" class="voice-icon" alt="语音输入" />
         </button>
@@ -99,7 +135,7 @@
         <button
           class="send-btn"
           @click="sendMessage"
-          :disabled="!inputText.trim() || isLoading"
+          :disabled="(!inputText.trim() && uploadedFiles.filter(f => !f.uploading).length === 0) || isLoading || uploadedFiles.some(f => f.uploading)"
         >
           <span>发送</span>
         </button>
@@ -112,6 +148,12 @@
       v-model:visible="showVoiceModal"
       @confirm="handleVoiceConfirm"
     />
+
+    <!-- 图片预览弹窗 -->
+    <div v-if="previewImageUrl" class="image-preview-overlay" @click="previewImageUrl = null">
+      <img :src="previewImageUrl" class="image-preview-full" @click.stop />
+      <button class="image-preview-close" @click="previewImageUrl = null">✕</button>
+    </div>
     
   </div>
 </template>
@@ -156,6 +198,11 @@ const messagesContainer = ref(null)
 const inputRef = ref(null)
 const showVoiceModal = ref(false)
 
+// 附件上传相关状态
+const uploadedFiles = ref([])   // [{url, localPreview, name, uploading}]
+const fileInputRef = ref(null)
+const previewImageUrl = ref(null)
+
 // 侧边栏相关状态
 const showSidebar = ref(false)
 const chatHistory = ref([])
@@ -198,17 +245,26 @@ watch(
 
 // 发送消息
 const sendMessage = async () => {
-  if (!inputText.value.trim() || isLoading.value) return
+  const hasText = inputText.value.trim()
+  const readyFiles = uploadedFiles.value.filter(f => !f.uploading && f.url)
+  if ((!hasText && readyFiles.length === 0) || isLoading.value) return
+
+  // 收集已上传完成的图片 OSS URL
+  const fileLinks = readyFiles.map(f => f.url)
 
   const userMessage = {
     role: 'user',
     content: inputText.value.trim(),
+    images: fileLinks.length > 0 ? [...fileLinks] : undefined,
     timestamp: new Date()
   }
 
   messages.value.push(userMessage)
   const currentInput = inputText.value.trim()
   inputText.value = ''
+  // 清空已上传图片列表并释放本地 Object URL
+  uploadedFiles.value.forEach(f => f.localPreview && URL.revokeObjectURL(f.localPreview))
+  uploadedFiles.value = []
   isLoading.value = true
 
   // 创建助手消息对象，使用 reactive 确保响应式更新
@@ -229,7 +285,8 @@ const sendMessage = async () => {
       body: JSON.stringify({
         query: currentInput,
         sessionId: currentSessionId.value,
-        userId: userId.value
+        userId: userId.value,
+        ...(fileLinks.length > 0 && { fileLinks })
       })
     })
 
@@ -447,6 +504,59 @@ const handleVoiceConfirm = (text) => {
   nextTick(() => {
     inputRef.value?.focus()
   })
+}
+
+/**
+ * 处理文件选择：为每个图片生成本地预览，并立即上传到 OSS
+ * 使用对象引用而非下标，避免多文件上传时下标偏移引发错误赋值。
+ */
+const handleFileSelect = async (event) => {
+  const files = Array.from(event.target.files)
+  // 重置 input 值，允许重复选择同一文件
+  event.target.value = ''
+
+  for (const file of files) {
+    const localPreview = URL.createObjectURL(file)
+    // 用 reactive 包装以便直接通过引用修改属性
+    const entry = reactive({ url: null, localPreview, name: file.name, uploading: true })
+    uploadedFiles.value.push(entry)
+
+    try {
+      const ossUrl = await chatApi.uploadFile(file)
+      // 校验返回值：必须是以 http 开头的字符串，否则视为业务失败
+      if (typeof ossUrl !== 'string' || !ossUrl.startsWith('http')) {
+        throw new Error(typeof ossUrl === 'object' && ossUrl?.message ? ossUrl.message : '上传失败，返回格式异常')
+      }
+      entry.url = ossUrl
+      entry.uploading = false
+    } catch (err) {
+      console.error('图片上传失败:', err)
+      URL.revokeObjectURL(localPreview)
+      // 通过引用查找下标，避免多文件时下标偏移
+      const currentIdx = uploadedFiles.value.indexOf(entry)
+      if (currentIdx !== -1) uploadedFiles.value.splice(currentIdx, 1)
+    }
+  }
+}
+
+/**
+ * 移除已选择的图片
+ * @param {number} idx - 要移除的图片索引
+ */
+const removeUploadedFile = (idx) => {
+  const entry = uploadedFiles.value[idx]
+  if (entry?.localPreview) {
+    URL.revokeObjectURL(entry.localPreview)
+  }
+  uploadedFiles.value.splice(idx, 1)
+}
+
+/**
+ * 打开图片全屏预览
+ * @param {string} url - 图片 URL
+ */
+const openImagePreview = (url) => {
+  previewImageUrl.value = url
 }
 
 
@@ -977,6 +1087,173 @@ const handleVoiceConfirm = (text) => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ===== 附件上传：图片预览区 ===== */
+.upload-preview-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0 0.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.upload-preview-item {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.upload-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.upload-uploading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+}
+
+.upload-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border-color);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.upload-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.2s;
+}
+
+.upload-remove-btn:hover {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+/* ===== 附件按钮 ===== */
+.attach-btn {
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.attach-btn:hover:not(:disabled) {
+  background: var(--border-color);
+  border-color: var(--border-hover);
+  transform: scale(1.05);
+  color: #667eea;
+}
+
+.attach-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== 消息气泡中的图片 ===== */
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.message-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  object-fit: cover;
+  cursor: zoom-in;
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: block;
+}
+
+.message-image:hover {
+  transform: scale(1.03);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* ===== 图片全屏预览弹窗 ===== */
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  cursor: zoom-out;
+}
+
+.image-preview-full {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.image-preview-close {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.image-preview-close:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .input-container {

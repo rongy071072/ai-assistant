@@ -140,6 +140,27 @@ export const chatApi = {
         return data
       }]
     })
+  },
+
+  /**
+   * 批量上传文件到 OSS
+   * @param {File[]} files - 要上传的文件数组
+   * @returns {Promise<string[]>} 返回文件的 OSS 访问 URL 数组
+   */
+  batchUploadFiles(files) {
+    const formData = new FormData()
+    files.forEach(file => {
+      formData.append('files', file)
+    })
+    return request({
+      url: '/common_server/oss/batchUpload',
+      method: 'post',
+      data: formData,
+      transformRequest: [(data, headers) => {
+        delete headers['Content-Type']
+        return data
+      }]
+    })
   }
 }
 

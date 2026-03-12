@@ -172,7 +172,7 @@ const handleLogin = async () => {
     const code = result.code
 
     if (code === 200) {
-      // 保存用户信息到 localStorage
+      // 保存用户信息到 localStorage（含头像 avatar）
       const userInfo = {
         token: result.data.token,
         role: result.data.user.role,
@@ -180,6 +180,7 @@ const handleLogin = async () => {
         address: result.data.user.address,
         email: result.data.user.email,
         lastLoginTime: result.data.user.lastLoginTime,
+        avatar: result.data.user.avatar,
       }
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
       // alert('登录成功！')

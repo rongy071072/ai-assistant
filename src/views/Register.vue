@@ -53,6 +53,29 @@
           />
         </div>
 
+        <!-- 头像：仅选择默认头像 -->
+        <div class="form-group avatar-group">
+          <label>选择头像</label>
+          <div class="avatar-options">
+            <div v-if="avatarsLoading" class="avatars-loading">加载默认头像中...</div>
+            <template v-else>
+              <div
+                v-for="(url, index) in defaultAvatars"
+                :key="index"
+                class="avatar-option"
+                :class="{ selected: registerForm.avatar === url }"
+                @click="registerForm.avatar = url"
+              >
+                <img :src="resolveAvatarUrl(url)" alt="默认头像" />
+              </div>
+            </template>
+          </div>
+          <div v-if="registerForm.avatar" class="avatar-preview">
+            <span class="avatar-preview-label">已选头像：</span>
+            <img :src="resolveAvatarUrl(registerForm.avatar)" alt="当前头像" class="avatar-preview-img" />
+          </div>
+        </div>
+
         <!-- Cloudflare Turnstile 人机验证（必须先通过才能发送邮箱验证码） -->
         <div class="form-group">
           <label>人机验证</label>
@@ -105,7 +128,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from "vue"
 import { useRouter } from "vue-router"
-import { registerUser, sendEmailCaptcha, validateEmailCaptcha } from "@/api/user"
+import { registerUser, sendEmailCaptcha, validateEmailCaptcha, getAvatars } from "@/api/user"
 import { turnstileConfig } from "@/config"
 
 const router = useRouter()
@@ -115,7 +138,8 @@ const registerForm = reactive({
   password: "",
   address: "",
   email: "",
-  captcha: ""
+  captcha: "",
+  avatar: ""
 })
 
 // 加载状态
@@ -127,6 +151,41 @@ const captchaId = ref("")
 const isSending = ref(false)
 const countdown = ref(0)
 let countdownTimer = null
+
+// 默认头像列表与加载状态
+const defaultAvatars = ref([])
+const avatarsLoading = ref(false)
+
+/** 解析头像展示 URL：含 avatar/ 的路径走静态代理，其它相对路径走 /api */
+const resolveAvatarUrl = (url) => {
+  if (!url) return ''
+  const u = (typeof url === 'string' ? url : '').trim()
+  if (!u) return ''
+  if (/^https?:\/\//.test(u)) return u
+  if (u.startsWith('/avatar/') || u.startsWith('avatar/')) {
+    return '/' + u.replace(/^\/+/, '')
+  }
+  return `/api${u.startsWith('/') ? u : '/' + u}`
+}
+
+/**
+ * 加载默认头像列表
+ * 接口返回 data: [{ id, url }, ...]，此处只保留 url 用于展示与提交
+ */
+const loadDefaultAvatars = async () => {
+  avatarsLoading.value = true
+  try {
+    const list = await getAvatars()
+    defaultAvatars.value = Array.isArray(list)
+      ? list.map((item) => (item && item.url ? item.url : '')).filter(Boolean)
+      : []
+  } catch (e) {
+    console.warn('获取默认头像失败:', e)
+    defaultAvatars.value = []
+  } finally {
+    avatarsLoading.value = false
+  }
+}
 
 // Turnstile 相关
 const turnstileRef = ref(null)
@@ -309,7 +368,7 @@ const handleRegister = async () => {
       return
     }
 
-    // 验证码通过后，调用注册API (将 Turnstile token 也发送给后端)
+    // 验证码通过后，调用注册API (将 Turnstile token、头像 也发送给后端)
     const result = await registerUser({
       name: registerForm.name,
       password: registerForm.password,
@@ -317,7 +376,8 @@ const handleRegister = async () => {
       email: registerForm.email,
       captcha: registerForm.captcha,
       captchaId: captchaId.value,
-      turnstileToken: turnstileToken.value // 添加 Turnstile token
+      turnstileToken: turnstileToken.value,
+      avatar: registerForm.avatar || undefined
     })
 
     // 判断后端返回的业务状态码
@@ -379,6 +439,7 @@ const goToHome = () => {
 // 组件挂载时初始化
 onMounted(() => {
   initTurnstile()
+  loadDefaultAvatars()
 })
 
 // 组件卸载时清理 Turnstile 和倒计时定时器
@@ -595,6 +656,59 @@ onUnmounted(() => {
   font-size: 12px;
   color: #e67e22;
   margin-top: 4px;
+}
+
+/* 头像选择与上传 */
+.avatar-group {
+  .avatar-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .avatars-loading {
+    font-size: 13px;
+    color: var(--text-tertiary);
+  }
+  .avatar-option {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--border-color);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.2s, transform 0.2s;
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    &:hover {
+      border-color: #667eea;
+    }
+    &.selected {
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+    }
+  }
+  .avatar-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .avatar-preview-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .avatar-preview-img {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border-color);
+  }
 }
 
 .footer-link {

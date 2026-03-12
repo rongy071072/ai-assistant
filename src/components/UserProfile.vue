@@ -25,11 +25,20 @@ const username = computed(() => {
   return userInfo.value ? userInfo.value.username || userInfo.value.name : ''
 })
 
-const avatar = computed(() => {
-  // 这里可以从用户信息中获取头像URL，如果没有则使用默认头像
-  return 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#e0e0e0"/><circle cx="16" cy="12" r="5" fill="#999"/><path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10" fill="#999"/></svg>')
+const defaultAvatarSvg = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#e0e0e0"/><circle cx="16" cy="12" r="5" fill="#999"/><path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10" fill="#999"/></svg>')
 
-})
+/** 解析头像展示 URL：含 avatar/ 的路径走静态代理，其它相对路径走 /api */
+const resolveAvatarUrl = (url) => {
+  if (!url || typeof url !== 'string' || !url.trim()) return defaultAvatarSvg
+  const u = url.trim()
+  if (/^https?:\/\//.test(u)) return u
+  if (u.startsWith('/avatar/') || u.startsWith('avatar/')) {
+    return '/' + u.replace(/^\/+/, '')
+  }
+  return `/api${u.startsWith('/') ? u : '/' + u}`
+}
+
+const avatar = computed(() => resolveAvatarUrl(userInfo.value?.avatar))
 
 // 检查登录状态
 const checkLoginStatus = () => {

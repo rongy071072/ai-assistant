@@ -8,7 +8,8 @@
     <div class="profile-content">
       <div class="user-info">
         <div class="avatar">
-          <span class="avatar-text">{{ userInitials }}</span>
+          <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" class="avatar-img" />
+          <span v-else class="avatar-text">{{ userInitials }}</span>
         </div>
         <div class="user-details">
           <h2>{{ userName }}</h2>
@@ -54,6 +55,36 @@
         </div>
         <div class="modal-body">
           <form @submit.prevent="submitEditProfile">
+            <!-- 头像修改 -->
+            <div class="form-group avatar-edit-group">
+              <label>头像</label>
+              <div class="avatar-edit-current">
+                <img v-if="editForm.avatar" :src="resolveAvatarUrl(editForm.avatar)" alt="当前头像" class="avatar-edit-preview" />
+                <span v-else class="avatar-edit-placeholder">{{ userInitials }}</span>
+              </div>
+              <div class="avatar-edit-options">
+                <div v-if="avatarsLoading" class="avatars-loading">加载中...</div>
+                <template v-else>
+                  <div
+                    v-for="(url, index) in defaultAvatars"
+                    :key="index"
+                    class="avatar-option"
+                    :class="{ selected: editForm.avatar === url }"
+                    @click="editForm.avatar = url"
+                  >
+                    <img :src="resolveAvatarUrl(url)" alt="默认头像" />
+                  </div>
+                </template>
+              </div>
+              <div class="avatar-upload-row">
+                <label class="upload-label">
+                  <input type="file" accept="image/*" class="upload-input" @change="handleAvatarUpload" />
+                  <span class="upload-btn-text">上传自定义头像</span>
+                </label>
+                <span v-if="avatarUploading" class="upload-status">上传中...</span>
+              </div>
+              <span v-if="avatarError" class="avatar-error">{{ avatarError }}</span>
+            </div>
             <div class="form-group">
               <label for="name">姓名</label>
               <input type="text" id="name" v-model="editForm.name" required>
@@ -110,12 +141,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { updateUserInfo } from '@/api/user'
+import { updateUserInfo, getAvatars } from '@/api/user'
+import { chatApi } from '@/api/chat'
 
 const router = useRouter()
 
-// 用户信息（暂时使用本地存储，实际应该从API获取）
-// 安全地解析 userInfo
+// 用户信息（从本地存储读取；保存资料后同步更新以便头像等即时刷新）
 const getUserInfo = () => {
   const item = localStorage.getItem('userInfo')
   if (!item) return null
@@ -127,25 +158,46 @@ const getUserInfo = () => {
   }
 }
 
-const userInfo = getUserInfo()
+const userInfo = ref(getUserInfo())
 
-const userName = ref(userInfo?.name || '')
-const userEmail = ref(userInfo?.email || '')
-const userAddress = ref(userInfo?.address || '')
+const userName = ref(userInfo.value?.name || '')
+const userEmail = ref(userInfo.value?.email || '')
+const userAddress = ref(userInfo.value?.address || '')
 
 const userInitials = computed(() => {
   return userName.value.charAt(0).toUpperCase() || ''
 })
 
+/** 解析头像展示 URL：含 avatar/ 的路径走静态代理，其它相对路径走 /api */
+const resolveAvatarUrl = (url) => {
+  if (!url || typeof url !== 'string' || !url.trim()) return ''
+  const u = url.trim()
+  if (/^https?:\/\//.test(u)) return u
+  if (u.startsWith('/avatar/') || u.startsWith('avatar/')) {
+    return '/' + u.replace(/^\/+/, '')
+  }
+  return `/api${u.startsWith('/') ? u : '/' + u}`
+}
+
+/** 用户头像 URL（登录返回的 avatar），无则用空串不显示图片 */
+const userAvatarUrl = computed(() => resolveAvatarUrl(userInfo.value?.avatar))
+
 // 弹窗状态
 const showEditModal = ref(false)
 const showPasswordModal = ref(false)
+
+// 默认头像列表
+const defaultAvatars = ref([])
+const avatarsLoading = ref(false)
+const avatarUploading = ref(false)
+const avatarError = ref('')
 
 // 编辑资料表单
 const editForm = ref({
   name: userName.value,
   email: userEmail.value,
-  address: userAddress.value
+  address: userAddress.value,
+  avatar: userInfo.value?.avatar || ''
 })
 
 // 更改密码表单
@@ -160,13 +212,57 @@ const goBack = () => {
   router.go(-1)
 }
 
+/** 加载默认头像列表 */
+const loadDefaultAvatars = async () => {
+  avatarsLoading.value = true
+  try {
+    const list = await getAvatars()
+    defaultAvatars.value = Array.isArray(list)
+      ? list.map((item) => (item && item.url ? item.url : '')).filter(Boolean)
+      : []
+  } catch (e) {
+    console.warn('获取默认头像失败:', e)
+    defaultAvatars.value = []
+  } finally {
+    avatarsLoading.value = false
+  }
+}
+
+/** 上传头像到 OSS */
+const handleAvatarUpload = async (e) => {
+  const file = e.target?.files?.[0]
+  if (!file || !file.type.startsWith('image/')) {
+    avatarError.value = '请选择图片文件'
+    return
+  }
+  avatarUploading.value = true
+  avatarError.value = ''
+  try {
+    const url = await chatApi.uploadFile(file)
+    if (url && typeof url === 'string') {
+      editForm.value.avatar = url
+    } else {
+      avatarError.value = '上传失败，请重试'
+    }
+  } catch (err) {
+    console.error('头像上传失败:', err)
+    avatarError.value = '头像上传失败，请重试'
+  } finally {
+    avatarUploading.value = false
+    e.target.value = ''
+  }
+}
+
 // 编辑资料
 const editProfile = () => {
   editForm.value = {
     name: userName.value,
     email: userEmail.value,
-    address: userAddress.value
+    address: userAddress.value,
+    avatar: userInfo.value?.avatar || ''
   }
+  avatarError.value = ''
+  loadDefaultAvatars()
   showEditModal.value = true
 }
 
@@ -180,23 +276,32 @@ const changePassword = () => {
   showPasswordModal.value = true
 }
 
-// 提交编辑资料
+// 提交编辑资料（含头像）
 const submitEditProfile = async () => {
-  // TODO: 调用API更新用户信息
-  // 这里暂时更新本地状态
   userName.value = editForm.value.name
   userEmail.value = editForm.value.email
   userAddress.value = editForm.value.address
 
-  const data = await updateUserInfo(editForm.value)
-  if (data.code === 200) {
-    // 更新localStorage
-    const updatedUserInfo = { ...userInfo, name: editForm.value.name, email: editForm.value.email, address: editForm.value.address }
+  const data = await updateUserInfo({
+    name: editForm.value.name,
+    email: editForm.value.email,
+    address: editForm.value.address,
+    avatar: editForm.value.avatar || undefined
+  })
+  if (data && data.code === 200) {
+    const updatedUserInfo = {
+      ...userInfo.value,
+      name: editForm.value.name,
+      email: editForm.value.email,
+      address: editForm.value.address,
+      avatar: editForm.value.avatar
+    }
     localStorage.setItem('userInfo', JSON.stringify(updatedUserInfo))
+    userInfo.value = updatedUserInfo
     showEditModal.value = false
     alert('资料更新成功')
-  }else {
-    alert('资料更新失败')
+  } else {
+    alert(data?.message || '资料更新失败')
   }
 }
 
@@ -289,6 +394,13 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   margin-right: 1.5rem;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .avatar-text {
@@ -508,5 +620,118 @@ onMounted(() => {
 
 .btn-primary:hover {
   background: #5a67d8;
+}
+
+/* 头像编辑区域 */
+.avatar-edit-group {
+  margin-bottom: 1.5rem;
+}
+
+.avatar-edit-current {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.avatar-edit-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #667eea;
+}
+
+.avatar-edit-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.avatar-edit-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.avatars-loading {
+  font-size: 13px;
+  color: #999;
+}
+
+.avatar-option {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #ddd;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.avatar-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-option:hover {
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.avatar-option.selected {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.upload-input {
+  display: none;
+}
+
+.upload-label {
+  cursor: pointer;
+}
+
+.upload-btn-text {
+  display: inline-block;
+  padding: 6px 14px;
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #333;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.upload-btn-text:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.upload-status {
+  font-size: 12px;
+  color: #999;
+}
+
+.avatar-error {
+  display: block;
+  font-size: 12px;
+  color: #e74c3c;
+  margin-top: 4px;
 }
 </style>

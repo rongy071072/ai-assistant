@@ -52,7 +52,10 @@
         :class="['message-item', message.role]"
       >
         <div :class="['message-avatar', { 'is-ai': message.role !== 'user' }]">
-          <span v-if="message.role === 'user'">👤</span>
+          <template v-if="message.role === 'user'">
+            <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" class="user-avatar-img" />
+            <span v-else>👤</span>
+          </template>
           <div v-else class="cat-avatar"></div>
         </div>
         <div class="message-content">
@@ -209,13 +212,25 @@ const chatHistory = ref([])
 
 const currentSessionId = ref(null)
 const userId = ref(null)
+const userAvatarUrl = ref('')
 
+/** 解析头像展示 URL */
+const resolveAvatarUrl = (url) => {
+  if (!url || typeof url !== 'string' || !url.trim()) return ''
+  const u = url.trim()
+  if (/^https?:\/\//.test(u)) return u
+  if (u.startsWith('/avatar/') || u.startsWith('avatar/')) {
+    return '/' + u.replace(/^\/+/, '')
+  }
+  return `/api${u.startsWith('/') ? u : '/' + u}`
+}
 
 // 加载对话记录
 onMounted(async () => {
   currentSessionId.value = chatStore.getCurrentSessionId()
   const userInfo = JSON.parse(localStorage.getItem('userInfo'))
   userId.value = userInfo?.email || null
+  userAvatarUrl.value = resolveAvatarUrl(userInfo?.avatar)
 
   // 加载历史会话列表
   await loadHistoryList()
@@ -958,6 +973,13 @@ const openImagePreview = (url) => {
 
 .message-item.user .message-avatar {
   background: #48bb78;
+}
+
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .message-content {

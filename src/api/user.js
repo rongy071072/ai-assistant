@@ -164,3 +164,14 @@ export const getDialogCount = () => {
     method: 'get'
   })
 }
+
+/**
+ * 获取全部默认头像路径（用于注册等场景）
+ * @returns {Promise<string[]>} 默认头像 URL 列表
+ */
+export const getAvatars = () => {
+  return request({
+    url: '/common_server/user/getAvatars',
+    method: 'get'
+  })
+}

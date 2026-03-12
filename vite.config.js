@@ -14,6 +14,12 @@ export default defineConfig({
     host: 'localhost', // 明确使用 localhost，确保与 Turnstile 配置的 hostname 匹配
     port: 3000,
     proxy: {
+      // 头像静态资源：后端有 context-path=/common_server，需要补上前缀
+      '/avatar': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+        rewrite: (path) => '/common_server' + path
+      },
       '/api': {
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,

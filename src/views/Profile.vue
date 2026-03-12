@@ -82,6 +82,7 @@
                   <span class="upload-btn-text">上传自定义头像</span>
                 </label>
                 <span v-if="avatarUploading" class="upload-status">上传中...</span>
+                <span v-if="avatarSuccess" class="upload-success">{{ avatarSuccess }}</span>
               </div>
               <span v-if="avatarError" class="avatar-error">{{ avatarError }}</span>
             </div>
@@ -191,6 +192,7 @@ const defaultAvatars = ref([])
 const avatarsLoading = ref(false)
 const avatarUploading = ref(false)
 const avatarError = ref('')
+const avatarSuccess = ref('')
 
 // 编辑资料表单
 const editForm = ref({
@@ -237,10 +239,13 @@ const handleAvatarUpload = async (e) => {
   }
   avatarUploading.value = true
   avatarError.value = ''
+  avatarSuccess.value = ''
   try {
     const url = await chatApi.uploadFile(file)
     if (url && typeof url === 'string') {
       editForm.value.avatar = url
+      avatarSuccess.value = '头像上传成功'
+      setTimeout(() => { avatarSuccess.value = '' }, 3000)
     } else {
       avatarError.value = '上传失败，请重试'
     }
@@ -262,6 +267,7 @@ const editProfile = () => {
     avatar: userInfo.value?.avatar || ''
   }
   avatarError.value = ''
+  avatarSuccess.value = ''
   loadDefaultAvatars()
   showEditModal.value = true
 }
@@ -726,6 +732,12 @@ onMounted(() => {
 .upload-status {
   font-size: 12px;
   color: #999;
+}
+
+.upload-success {
+  font-size: 12px;
+  color: #27ae60;
+  font-weight: 500;
 }
 
 .avatar-error {
